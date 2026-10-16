@@ -1,0 +1,85 @@
+/* Light brand layer: remaps the app's legacy inline palette to TOGO brand tokens. See AGENTS.md. */
+:root{
+  --bg-base:#F8FAFC;--bg-surface:#FFFFFF;--bg-surface-2:#F1F5F9;
+  --color-primary:#0272B7;--color-primary-light:#E8F3FA;--color-accent:#011726;--color-accent-light:#E8EEF2;
+  --brand-contrast:#FFFFFF;--brand-shadow:0 4px 14px rgba(2,114,183,.22);--brand-focus:0 0 0 3px rgba(2,114,183,.12);
+  --text-primary:#011726;--text-secondary:#6B7280;--text-muted:#9CA3AF;
+  --border-subtle:#F1F5F9;--border-default:#E2E8F0;--border-active:#0272B7;
+  --color-success:#16A34A;--color-success-light:#DCFCE7;--color-error:#EF4444;--color-error-light:#FEE2E2;
+  --color-warning:#D97706;--color-warning-light:#FEF9C3;--color-info:#3B82F6;--color-info-light:#EFF6FF;
+  --radius-lg:16px;--radius-md:12px;--radius-sm:8px;--radius-pill:100px;
+  color-scheme:light;
+}
+html body, html body *{font-family:"Outfit",ui-sans-serif,system-ui,sans-serif}
+/* Legacy primary fills use the official blue with white labels. */
+html [style*="background: rgb(17, 24, 39)"],html [style*="background-color: rgb(17, 24, 39)"],
+html [style*="background: rgb(15, 23, 42)"],html [style*="background-color: rgb(15, 23, 42)"]{
+  background-color:var(--color-primary) !important;color:var(--brand-contrast) !important;
+}
+html button[style*="background: rgb(17, 24, 39)"],html button[style*="background-color: rgb(17, 24, 39)"]{
+  box-shadow:var(--brand-shadow);font-weight:600;
+}
+html button[style*="background: rgb(17, 24, 39)"]:hover,html button[style*="background-color: rgb(17, 24, 39)"]:hover{filter:brightness(1.05)}
+html [style*="background: rgb(17, 24, 39)"] *,html [style*="background-color: rgb(17, 24, 39)"] *{color:var(--brand-contrast) !important}
+html [style*="background: rgb(17, 24, 39)"] svg,html [style*="background-color: rgb(17, 24, 39)"] svg{stroke:var(--brand-contrast) !important}
+html [style*="border: 1px solid rgb(17, 24, 39)"]{border-color:var(--color-primary) !important}
+/* Modal overlays keep a dark scrim */
+html [style*="background: rgba(15, 23, 42"]{background:rgba(15,23,42,.45) !important;color:inherit !important}
+/* Text palette */
+html [style*="color: rgb(100, 116, 139)"]:not([style*="background"]){color:var(--text-secondary) !important}
+html [style*="color: rgb(148, 163, 184)"]:not([style*="background"]){color:var(--text-muted) !important}
+/* Status tints */
+html [style*="background: rgb(254, 242, 242)"],html [style*="background-color: rgb(254, 242, 242)"]{background-color:var(--color-error-light) !important}
+html [style*="background: rgb(255, 251, 235)"],html [style*="background-color: rgb(255, 251, 235)"]{background-color:var(--color-warning-light) !important}
+/* Inputs */
+html input:not([type=checkbox]):not([type=radio]):not([type=range]):focus,html textarea:focus,html select:focus{
+  border-color:var(--color-primary) !important;box-shadow:var(--brand-focus) !important;outline:none;
+}
+html input[type=checkbox],html input[type=radio],html input[type=range]{accent-color:var(--color-primary)}
+/* Toasts */
+html [data-sonner-toast]{background:#FFFFFF !important;color:var(--text-primary) !important;border:1px solid var(--border-default) !important}
+.togo-ex-action:hover,.togo-msg-icon:hover{color:var(--color-primary) !important}
+.togo-info-tip{background:#111827 !important}
+/* Button contrast rules */
+html button[style*="background: rgb(255, 255, 255)"],html button[style*="background-color: rgb(255, 255, 255)"],
+html button[style*="background: transparent"],html button[style*="background-color: transparent"],
+html button[style*="background: rgb(248, 250, 252)"],html button[style*="background: rgb(241, 245, 249)"],
+html button[style*="background-color: rgb(248, 250, 252)"],html button[style*="background-color: rgb(241, 245, 249)"]{
+  color:#111827;
+}
+html button[style*="background: rgb(255, 255, 255)"][style*="color: rgb(255, 255, 255)"],
+html button[style*="background-color: rgb(255, 255, 255)"][style*="color: rgb(255, 255, 255)"],
+html button[style*="background: transparent"][style*="color: rgb(255, 255, 255)"]{color:var(--text-primary) !important}
+/* Brand fills, including legacy cyan and pink, now use the official palette. */
+html [style*="background: rgb(0, 200, 224)"],html [style*="background-color: rgb(0, 200, 224)"],
+html [style*="background: rgb(0, 229, 255)"],html [style*="background-color: rgb(0, 229, 255)"]{
+  background-color:var(--color-primary) !important;color:var(--brand-contrast) !important;
+}
+html [style*="background: rgb(255, 42, 95)"],html [style*="background-color: rgb(255, 42, 95)"]{
+  background-color:var(--color-accent) !important;color:var(--brand-contrast) !important;
+}
+html [style*="background: var(--color-primary)"],html [style*="background-color: var(--color-primary)"],
+html [style*="background: var(--color-accent)"],html [style*="background-color: var(--color-accent)"],
+html .bg-primary{color:var(--brand-contrast) !important}
+html [style*="background: var(--color-primary)"] *,html [style*="background-color: var(--color-primary)"] *,
+html [style*="background: var(--color-accent)"] *,html [style*="background-color: var(--color-accent)"] *,
+html [style*="background: rgb(0, 200, 224)"] *,html [style*="background-color: rgb(0, 200, 224)"] *{color:var(--brand-contrast) !important}
+html [style*="background: var(--color-primary)"] svg,html [style*="background-color: var(--color-primary)"] svg{stroke:currentColor !important}
+html button:disabled,html [aria-disabled="true"]{opacity:.4}
+/* Visual consistency pass (logo palette) */
+html input::placeholder,html textarea::placeholder{color:#9CA3AF !important;opacity:1}
+html button[style*="background: rgb(17, 24, 39)"],html button[style*="background-color: rgb(17, 24, 39)"],
+html button[style*="background: var(--color-primary)"],html button[style*="background-color: var(--color-primary)"],
+html button[style*="background: rgb(0, 200, 224)"],html button[style*="background-color: rgb(0, 200, 224)"]{border-radius:12px}
+html button[style*="color: rgb(239, 68, 68)"][style*="background: transparent"],
+html button[style*="color: rgb(239, 68, 68)"][style*="background-color: transparent"]{border:1.5px solid rgba(239,68,68,.4) !important}
+html th{font-size:11px;font-weight:500;color:#9CA3AF;text-transform:uppercase}
+html [role="switch"][aria-checked="true"],html [data-state="checked"][role="switch"]{background-color:var(--color-primary) !important}
+html [role="switch"][aria-checked="false"],html [data-state="unchecked"][role="switch"]{background-color:#E2E8F0 !important}
+html [aria-current="page"] svg{color:var(--color-primary)}
+/* Server-rendered hex forms of the legacy dark fill */
+html [style*="background-color:#111827"],html [style*="background:#111827"],
+html [style*="background-color:#0F172A"],html [style*="background:#0F172A"]{background-color:var(--color-primary) !important;color:var(--brand-contrast) !important}
+html [style*="background-color:#111827"] *,html [style*="background:#111827"] *{color:var(--brand-contrast) !important}
+html [style*="background-color:#111827"] svg,html [style*="background:#111827"] svg{stroke:var(--brand-contrast) !important}
+html [style*="color: var(--color-primary)"][style*="primary-light"] svg,html [style*="color:var(--color-primary)"] svg{color:var(--color-primary)}
