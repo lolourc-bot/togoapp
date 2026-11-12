@@ -1,1 +1,1 @@
-/Users/adolfomartinez/Desktop/togoapp/router.tsx
+../router.tsx

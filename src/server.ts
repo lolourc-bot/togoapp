@@ -1,1 +1,1 @@
-/Users/adolfomartinez/Desktop/togoapp/server.ts
+../server.ts

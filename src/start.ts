@@ -1,1 +1,1 @@
-/Users/adolfomartinez/Desktop/togoapp/start.ts
+../start.ts

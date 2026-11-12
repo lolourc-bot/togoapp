@@ -17,7 +17,9 @@ export type CanvasExercise = {
   extras?: { name: string; values: string[] }[];
 };
 export type CanvasSession = { name: string; exercises: CanvasExercise[]; circuits?: CircuitConfig[] };
+/** `sessions` is keyed by "week-day-slot"; a day can hold several sessions (slot orders them). */
 export type ProgramCanvas = { id: string; name: string; weeks: number; sessions: Record<string, CanvasSession> };
+export type ProgramSlot = { week: number; day: number; slot: number };
 
 export async function fetchProgramCanvases(coachId: string): Promise<ProgramCanvas[]> {
   const { data: progs, error } = await supabase
@@ -33,11 +35,11 @@ export async function fetchProgramCanvases(coachId: string): Promise<ProgramCanv
   if (ids.length) {
     const { data: rows } = await supabase
       .from("program_sessions")
-      .select("program_id, week_index, day_index, name, exercises, circuits")
+      .select("program_id, week_index, day_index, slot, name, exercises, circuits")
       .in("program_id", ids);
     for (const r of rows ?? []) {
       const bucket = (byProgram[r.program_id] ??= {});
-      bucket[`${r.week_index}-${r.day_index}`] = { name: r.name, exercises: r.exercises ?? [], circuits: r.circuits ?? [] };
+      bucket[`${r.week_index}-${r.day_index}-${r.slot ?? 0}`] = { name: r.name, exercises: r.exercises ?? [], circuits: r.circuits ?? [] };
     }
   }
 
@@ -74,6 +76,7 @@ export async function upsertProgramSession(
   programId: string,
   weekIndex: number,
   dayIndex: number,
+  slot: number,
   session: CanvasSession,
 ) {
   const { error } = await supabase.from("program_sessions").upsert(
@@ -82,47 +85,52 @@ export async function upsertProgramSession(
       program_id: programId,
       week_index: weekIndex,
       day_index: dayIndex,
+      slot,
       name: session.name,
       exercises: session.exercises,
       circuits: session.circuits ?? [],
     },
-    { onConflict: "program_id,week_index,day_index" },
+    { onConflict: "program_id,week_index,day_index,slot" },
   );
   if (error) throw error;
 }
 
-export async function deleteProgramSession(programId: string, weekIndex: number, dayIndex: number) {
+export async function deleteProgramSession(programId: string, weekIndex: number, dayIndex: number, slot: number) {
   const { error } = await supabase
     .from("program_sessions")
     .delete()
     .eq("program_id", programId)
     .eq("week_index", weekIndex)
-    .eq("day_index", dayIndex);
+    .eq("day_index", dayIndex)
+    .eq("slot", slot);
   if (error) throw error;
 }
 
-export async function moveProgramSession(
-  programId: string,
-  from: { week: number; day: number },
-  to: { week: number; day: number },
-) {
-  await supabase.from("program_sessions").delete().eq("program_id", programId).eq("week_index", to.week).eq("day_index", to.day);
+/** Moves a session to another (free) slot; the destination day keeps its own sessions. */
+export async function moveProgramSession(programId: string, from: ProgramSlot, to: ProgramSlot) {
   const { error } = await supabase
     .from("program_sessions")
-    .update({ week_index: to.week, day_index: to.day })
+    .update({ week_index: to.week, day_index: to.day, slot: to.slot })
     .eq("program_id", programId)
     .eq("week_index", from.week)
-    .eq("day_index", from.day);
+    .eq("day_index", from.day)
+    .eq("slot", from.slot);
   if (error) throw error;
 }
 
-export async function fetchProgramSession(programId: string, weekIndex: number, dayIndex: number): Promise<CanvasSession | null> {
+export async function fetchProgramSession(
+  programId: string,
+  weekIndex: number,
+  dayIndex: number,
+  slot: number,
+): Promise<CanvasSession | null> {
   const { data, error } = await supabase
     .from("program_sessions")
     .select("name, exercises, circuits")
     .eq("program_id", programId)
     .eq("week_index", weekIndex)
     .eq("day_index", dayIndex)
+    .eq("slot", slot)
     .maybeSingle();
   if (error || !data) return null;
   return { name: data.name, exercises: data.exercises ?? [], circuits: data.circuits ?? [] };

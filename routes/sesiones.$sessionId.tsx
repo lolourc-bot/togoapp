@@ -50,6 +50,7 @@ type SessionSearch = {
   programId?: string;
   week?: string;
   day?: string;
+  slot?: string;
   date?: string;
 };
 
@@ -60,6 +61,7 @@ export const Route = createFileRoute("/sesiones/$sessionId")({
     ...(typeof search["programId"] === "string" ? { programId: search["programId"] } : {}),
     ...(typeof search["week"] === "string" ? { week: search["week"] } : {}),
     ...(typeof search["day"] === "string" ? { day: search["day"] } : {}),
+    ...(typeof search["slot"] === "string" ? { slot: search["slot"] } : {}),
     ...(typeof search["date"] === "string" ? { date: search["date"] } : {}),
   }),
   head: () => ({
@@ -531,7 +533,7 @@ function SessionEditor() {
         const day = Number(search.day ?? 0);
         setHeaderLabel(`Semana ${week + 1} · Día ${day + 1}`);
         const [ps, days] = await Promise.all([
-          fetchProgramSession(search.programId!, week, day),
+          fetchProgramSession(search.programId!, week, day, Number(search.slot ?? 0)),
           fetchProgramSessionDays(search.programId!),
         ]);
         setProgramDays(days);
@@ -923,7 +925,7 @@ function SessionEditor() {
           id: e.id, name: e.name, sets: String(e.series.length), reps: e.series[0]?.reps ?? "", weight: e.series[0]?.weight ?? "",
           chained: chainFromGroups(groups, loaded.length)[i]!, series: e.series, notes: e.notes, rest: e.rest, microRest: e.microRest, repsUnit: e.repsUnit, weightUnit: e.weightUnit, extras: e.extras,
         }));
-        await upsertProgramSession(coachId, search.programId!, week, day, { name: sessionName, exercises: exs, circuits: customCircuits });
+        await upsertProgramSession(coachId, search.programId!, week, day, Number(search.slot ?? 0), { name: sessionName, exercises: exs, circuits: customCircuits });
         toast.success("Sesión guardada ✓");
         navigate({ to: "/lab" });
       }

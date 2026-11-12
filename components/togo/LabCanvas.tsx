@@ -11,7 +11,6 @@ import {
   X,
   Edit2,
   Copy,
-  Move,
   Save,
   ChevronDown,
   ChevronUp,
@@ -102,9 +101,9 @@ export const LabCanvas = forwardRef<
   const [draft, setDraft] = useState<CanvasSession | null>(null);
   const [dragFrom, setDragFrom] = useState<string | null>(null);
   const [hoverCell, setHoverCell] = useState<string | null>(null);
+  const [hoverChip, setHoverChip] = useState<string | null>(null);
   const [xHover, setXHover] = useState<string | null>(null);
   const [ctx, setCtx] = useState<{ key: string; x: number; y: number } | null>(null);
-  const [soonHover, setSoonHover] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const [selected, setSelected] = useState<string[]>([]);
@@ -127,9 +126,20 @@ export const LabCanvas = forwardRef<
     });
   }, [coachId]);
 
+  // Session keys are "week-day-slot"; a cell ("week-day") can hold several sessions.
   const keyParts = (key: string) => {
-    const [w, d] = key.split("-").map(Number);
-    return { week: w!, day: d! };
+    const [w, d, s] = key.split("-").map(Number);
+    return { week: w!, day: d!, slot: s ?? 0 };
+  };
+
+  const cellKeys = (sessions: Record<string, CanvasSession>, cell: string) =>
+    Object.keys(sessions)
+      .filter((k) => k.startsWith(`${cell}-`))
+      .sort((a, b) => keyParts(a).slot - keyParts(b).slot);
+
+  const nextSlotKey = (sessions: Record<string, CanvasSession>, cell: string) => {
+    const slots = cellKeys(sessions, cell).map((k) => keyParts(k).slot);
+    return `${cell}-${slots.length ? Math.max(...slots) + 1 : 0}`;
   };
 
   const patchActive = (fn: (c: CanvasDoc) => CanvasDoc) =>
@@ -138,11 +148,38 @@ export const LabCanvas = forwardRef<
   const setSessions = (fn: (s: Record<string, CanvasSession>) => Record<string, CanvasSession>) =>
     patchActive((c) => ({ ...c, sessions: fn(c.sessions) }));
 
+  // Autosave fires on every keystroke. Writes for the same session go through one ordered queue and
+  // only the latest pending version is sent, so a slower, older request can't overwrite a newer one.
+  const writeQueue = useRef(new Map<string, Promise<void>>());
+  const latestDraft = useRef(new Map<string, CanvasSession>());
+  const enqueueWrite = (id: string, op: () => Promise<unknown>, errMsg: string) => {
+    const prev = writeQueue.current.get(id) ?? Promise.resolve();
+    const next = prev.then(op).then(
+      () => undefined,
+      () => {
+        toast.error(errMsg);
+      },
+    );
+    writeQueue.current.set(id, next);
+  };
+
   const commitSession = (key: string, session: CanvasSession) => {
     setSessions((prev) => ({ ...prev, [key]: session }));
     if (!coachId) return;
-    const { week, day } = keyParts(key);
-    upsertProgramSession(coachId, active.id, week, day, session).catch(() => toast.error("No se pudo guardar la sesión"));
+    const programId = active.id;
+    const id = `${programId}:${key}`;
+    const { week, day, slot } = keyParts(key);
+    latestDraft.current.set(id, session);
+    enqueueWrite(
+      id,
+      async () => {
+        const latest = latestDraft.current.get(id);
+        if (!latest) return; // already sent by an earlier queued write
+        latestDraft.current.delete(id);
+        await upsertProgramSession(coachId, programId, week, day, slot, latest);
+      },
+      "No se pudo guardar la sesión",
+    );
   };
 
   const removeSession = (key: string) => {
@@ -151,8 +188,11 @@ export const LabCanvas = forwardRef<
       delete next[key];
       return next;
     });
-    const { week, day } = keyParts(key);
-    deleteProgramSession(active.id, week, day).catch(() => toast.error("No se pudo eliminar la sesión"));
+    const programId = active.id;
+    const id = `${programId}:${key}`;
+    const { week, day, slot } = keyParts(key);
+    latestDraft.current.delete(id);
+    enqueueWrite(id, () => deleteProgramSession(programId, week, day, slot), "No se pudo eliminar la sesión");
   };
 
   const addWeek = () => {
@@ -165,8 +205,8 @@ export const LabCanvas = forwardRef<
     const out: string[] = [];
     for (let w = 0; w < weeks && out.length < count; w++) {
       for (let d = 0; d < 7 && out.length < count; d++) {
-        const k = `${w}-${d}`;
-        if (!sessions[k]) out.push(k);
+        const cell = `${w}-${d}`;
+        if (cellKeys(sessions, cell).length === 0) out.push(`${cell}-0`);
       }
     }
     return out;
@@ -183,7 +223,7 @@ export const LabCanvas = forwardRef<
         if (!src) continue;
         let target = freeCells(sessions, weeks, 1)[0];
         if (!target) {
-          target = `${weeks}-0`;
+          target = `${weeks}-0-0`;
           weeks += 1;
         }
         const clone = { ...src, exercises: src.exercises.map((e) => ({ ...e, id: nextId() })) };
@@ -196,8 +236,8 @@ export const LabCanvas = forwardRef<
     if (!coachId) return;
     if (weeksAfter !== active.weeks) setProgramWeeks(active.id, weeksAfter).catch(() => toast.error("No se pudo guardar la semana nueva"));
     created.forEach(({ key, session }) => {
-      const { week, day } = keyParts(key);
-      upsertProgramSession(coachId, active.id, week, day, session).catch(() => toast.error("No se pudo duplicar una sesión"));
+      const { week, day, slot } = keyParts(key);
+      upsertProgramSession(coachId, active.id, week, day, slot, session).catch(() => toast.error("No se pudo duplicar una sesión"));
     });
   };
 
@@ -206,13 +246,11 @@ export const LabCanvas = forwardRef<
     newSession: () => {
       const free = freeCells(active.sessions, active.weeks, 1)[0];
       if (free) {
-        setEditing(free);
-        setDraft(blankSession());
+        openCell(free);
         return;
       }
       addWeek();
-      setEditing(`${active.weeks}-0`);
-      setDraft(blankSession());
+      openCell(`${active.weeks}-0-0`);
     },
   }));
 
@@ -395,6 +433,190 @@ export const LabCanvas = forwardRef<
         </button>
       </div>
     ) : null;
+
+  const renderChip = (key: string, session: CanvasSession, multi: boolean) => {
+    const isSel = selected.includes(key);
+    const isCollapsed = collapsed[`${active.id}:${key}`] ?? false;
+    return (
+      <div
+        data-chip={key}
+        draggable
+        onDragStart={(e) => {
+          e.stopPropagation();
+          setDragFrom(key);
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setSelected((prev) =>
+            e.shiftKey
+              ? prev.includes(key)
+                ? prev.filter((k) => k !== key)
+                : [...prev, key]
+              : [key],
+          );
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          openCell(key);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setCtx({ key, x: e.clientX, y: e.clientY });
+        }}
+        onMouseEnter={() => setHoverChip(key)}
+        onMouseLeave={() => setHoverChip((h) => (h === key ? null : h))}
+        className="relative flex min-w-0 cursor-pointer flex-col gap-1.5 overflow-hidden rounded-[10px] bg-white"
+        style={{
+          border: isSel ? "2px solid #3B82F6" : "1px solid #E2E8F0",
+          backgroundColor: isSel ? "#EFF6FF" : "#FFFFFF",
+          padding: "10px 12px",
+          minHeight: multi ? 0 : 80,
+          boxShadow:
+            hoverChip === key
+              ? "0 3px 10px rgba(0,0,0,0.1)"
+              : "0 1px 4px rgba(0,0,0,0.06)",
+        }}
+      >
+        <div className="flex flex-row items-center gap-1.5" style={{ marginBottom: 4 }}>
+          <span
+            className="min-w-0 flex-1 truncate text-[11px] font-bold"
+            style={{ color: "#111827" }}
+          >
+            {session.name}
+          </span>
+          <button
+            type="button"
+            aria-label={isCollapsed ? "Expandir sesión" : "Colapsar sesión"}
+            onClick={(e) => {
+              e.stopPropagation();
+              setCollapsed((prev) => ({
+                ...prev,
+                [`${active.id}:${key}`]: !isCollapsed,
+              }));
+            }}
+          >
+            {isCollapsed ? (
+              <ChevronDown size={10} style={{ color: "#CBD5E1" }} />
+            ) : (
+              <ChevronUp size={10} style={{ color: "#CBD5E1" }} />
+            )}
+          </button>
+        </div>
+
+        {isCollapsed ? (
+          <span className="text-[10px]" style={{ color: "#94A3B8" }}>
+            {`${session.exercises.length} ejercicios`}
+          </span>
+        ) : (
+          <div className="flex flex-col gap-[3px]">
+            {(() => {
+              let aCount = 0;
+              return buildRuns(session.exercises).map((run, ri) => {
+                const rows = run.items.map((e, i) => {
+                  const label = run.group ? `B${i + 1}` : `A${++aCount}`;
+                  const color = run.group ? "#3B82F6" : "#94A3B8";
+                  return (
+                    <div key={e.id} className="flex flex-row items-center gap-1.5">
+                      <span
+                        className="text-[9px] font-bold"
+                        style={{ color, width: 18, flexShrink: 0 }}
+                      >
+                        {label}
+                      </span>
+                      <span
+                        className="min-w-0 flex-1 truncate text-[10px]"
+                        style={{ color: "#374151" }}
+                      >
+                        {e.name || "Ejercicio"}
+                      </span>
+                      <span
+                        className="truncate whitespace-nowrap text-[10px]"
+                        style={{ color: "#94A3B8", maxWidth: "50%", flexShrink: 0 }}
+                      >
+                        {`${e.sets}×${e.reps}${e.weight ? `×${e.weight}kg` : ""}`}
+                      </span>
+                    </div>
+                  );
+                });
+                return run.group ? (
+                  <div
+                    key={`run${ri}`}
+                    className="flex flex-col gap-[3px]"
+                    style={{
+                      borderLeft: "2px solid #3B82F6",
+                      backgroundColor: "#FAFAFA",
+                      paddingLeft: 5,
+                    }}
+                  >
+                    {rows}
+                  </div>
+                ) : (
+                  <div key={`run${ri}`} className="flex flex-col gap-[3px]">
+                    {rows}
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        )}
+
+        {hoverChip === key ? (
+          <>
+            <GripVertical
+              size={10}
+              style={{ color: "#CBD5E1", position: "absolute", bottom: 6, right: 4 }}
+            />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditDetail?.(active.id, key);
+              }}
+              aria-label="Editar en detalle"
+              title="Editar en detalle"
+              className="flex cursor-pointer items-center justify-center rounded-full bg-white hover:bg-[#F1F5F9]"
+              style={{
+                position: "absolute",
+                top: 6,
+                right: 22,
+                width: 16,
+                height: 16,
+                border: "none",
+                padding: 0,
+              }}
+            >
+              <Edit2 size={10} style={{ color: "#64748B" }} />
+            </button>
+            <button
+              type="button"
+              aria-label="Eliminar sesión"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeSession(key);
+                setSelected((prev) => prev.filter((k) => k !== key));
+              }}
+              onMouseEnter={() => setXHover(key)}
+              onMouseLeave={() => setXHover((h) => (h === key ? null : h))}
+              className="flex cursor-pointer items-center justify-center rounded-full"
+              style={{
+                position: "absolute",
+                top: 6,
+                right: 4,
+                width: 16,
+                height: 16,
+                backgroundColor: xHover === key ? "#EF4444" : "rgba(17,24,39,0.08)",
+                border: "none",
+                padding: 0,
+              }}
+            >
+              <X size={10} style={{ color: xHover === key ? "#FFFFFF" : "#64748B" }} />
+            </button>
+          </>
+        ) : null}
+      </div>
+    );
+  };
 
   if (!coachId || !loaded) {
     return <div style={{ padding: 24, fontSize: 13, color: "#94A3B8" }}>Cargando lienzos…</div>;
@@ -748,233 +970,91 @@ export const LabCanvas = forwardRef<
                 : null}
 
               {DAYS.map((_d, dIdx) => {
-                const key = `${w}-${dIdx}`;
-                const session = active.sessions[key];
-                const isSel = selected.includes(key);
-                const isCollapsed = collapsed[`${active.id}:${key}`] ?? false;
+                const cell = `${w}-${dIdx}`;
+                const keys = cellKeys(active.sessions, cell);
+                const newKey = nextSlotKey(active.sessions, cell);
+                const addingNew = editing === newKey && !!draft;
+                const empty = keys.length === 0 && !addingNew;
                 return (
                   <div
-                    key={key}
+                    key={cell}
                     onClick={() => {
-                      if (!session) openCell(key);
+                      if (empty) openCell(newKey);
                     }}
-                    onMouseEnter={() => setHoverCell(key)}
-                    onMouseLeave={() => setHoverCell((h) => (h === key ? null : h))}
+                    onMouseEnter={() => setHoverCell(cell)}
+                    onMouseLeave={() => setHoverCell((h) => (h === cell ? null : h))}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => {
-                      if (!dragFrom || dragFrom === key) return;
+                      const from = dragFrom;
+                      setDragFrom(null);
+                      if (!from || from.startsWith(`${cell}-`)) return;
                       setSessions((prev) => {
-                        const moved = prev[dragFrom];
+                        const moved = prev[from];
                         if (!moved) return prev;
                         const next = { ...prev };
-                        delete next[dragFrom];
-                        next[key] = moved;
+                        delete next[from];
+                        next[newKey] = moved;
                         return next;
                       });
-                      const from = keyParts(dragFrom);
-                      const to = keyParts(key);
-                      moveProgramSession(active.id, from, to).catch(() => toast.error("No se pudo mover la sesión"));
-                      setDragFrom(null);
+                      setSelected((prev) => prev.map((k) => (k === from ? newKey : k)));
+                      const programId = active.id;
+                      enqueueWrite(
+                        `${programId}:${from}`,
+                        () => moveProgramSession(programId, keyParts(from), keyParts(newKey)),
+                        "No se pudo mover la sesión",
+                      );
                     }}
-                    className="relative cursor-pointer"
+                    className={`relative flex flex-col gap-1.5 ${empty ? "cursor-pointer" : ""}`}
                     style={{
                       minHeight: 80,
                       padding: 8,
-                      backgroundColor: hoverCell === key && !session ? "#F8FAFC" : "transparent",
+                      backgroundColor: hoverCell === cell && empty ? "#F8FAFC" : "transparent",
                       borderRight: dIdx === 6 ? "none" : "1px solid #E2E8F0",
                     }}
                   >
-                    {editing === key && draft ? (
-                      renderEditor()
-                    ) : session ? (
-                      <div
-                        data-chip={key}
-                        draggable
-                        onDragStart={(e) => {
-                          e.stopPropagation();
-                          setDragFrom(key);
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelected((prev) =>
-                            e.shiftKey
-                              ? prev.includes(key)
-                                ? prev.filter((k) => k !== key)
-                                : [...prev, key]
-                              : [key],
-                          );
-                        }}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          openCell(key);
-                        }}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setCtx({ key, x: e.clientX, y: e.clientY });
-                        }}
-                        className="relative flex cursor-pointer flex-col gap-1.5 rounded-[10px] bg-white"
-                        style={{
-                          border: isSel ? "2px solid #3B82F6" : "1px solid #E2E8F0",
-                          backgroundColor: isSel ? "#EFF6FF" : "#FFFFFF",
-                          padding: "10px 12px",
-                          minHeight: 80,
-                          boxShadow:
-                            hoverCell === key
-                              ? "0 3px 10px rgba(0,0,0,0.1)"
-                              : "0 1px 4px rgba(0,0,0,0.06)",
-                        }}
-                      >
-                        <div className="flex flex-row items-center gap-1.5" style={{ marginBottom: 4 }}>
-                          <span
-                            className="min-w-0 flex-1 truncate text-[11px] font-bold"
-                            style={{ color: "#111827" }}
-                          >
-                            {session.name}
-                          </span>
-                          <button
-                            type="button"
-                            aria-label={isCollapsed ? "Expandir sesión" : "Colapsar sesión"}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setCollapsed((prev) => ({
-                                ...prev,
-                                [`${active.id}:${key}`]: !isCollapsed,
-                              }));
-                            }}
-                          >
-                            {isCollapsed ? (
-                              <ChevronDown size={10} style={{ color: "#CBD5E1" }} />
-                            ) : (
-                              <ChevronUp size={10} style={{ color: "#CBD5E1" }} />
-                            )}
-                          </button>
-                        </div>
-
-                        {isCollapsed ? (
-                          <span className="text-[10px]" style={{ color: "#94A3B8" }}>
-                            {`${session.exercises.length} ejercicios`}
-                          </span>
-                        ) : (
-                          <div className="flex flex-col gap-[3px]">
-                            {(() => {
-                              let aCount = 0;
-                              return buildRuns(session.exercises).map((run, ri) => {
-                                const rows = run.items.map((e, i) => {
-                                  const label = run.group ? `B${i + 1}` : `A${++aCount}`;
-                                  const color = run.group ? "#3B82F6" : "#94A3B8";
-                                  return (
-                                    <div key={e.id} className="flex flex-row items-center gap-1.5">
-                                      <span
-                                        className="text-[9px] font-bold"
-                                        style={{ color, width: 18, flexShrink: 0 }}
-                                      >
-                                        {label}
-                                      </span>
-                                      <span
-                                        className="min-w-0 flex-1 truncate text-[10px]"
-                                        style={{ color: "#374151" }}
-                                      >
-                                        {e.name || "Ejercicio"}
-                                      </span>
-                                      <span
-                                        className="whitespace-nowrap text-[10px]"
-                                        style={{ color: "#94A3B8" }}
-                                      >
-                                        {`${e.sets}×${e.reps}${e.weight ? `×${e.weight}kg` : ""}`}
-                                      </span>
-                                    </div>
-                                  );
-                                });
-                                return run.group ? (
-                                  <div
-                                    key={`run${ri}`}
-                                    className="flex flex-col gap-[3px]"
-                                    style={{
-                                      borderLeft: "2px solid #3B82F6",
-                                      backgroundColor: "#FAFAFA",
-                                      paddingLeft: 5,
-                                    }}
-                                  >
-                                    {rows}
-                                  </div>
-                                ) : (
-                                  <div key={`run${ri}`} className="flex flex-col gap-[3px]">
-                                    {rows}
-                                  </div>
-                                );
-                              });
-                            })()}
-                          </div>
-                        )}
-
-                        {hoverCell === key ? (
-                          <>
-                            <GripVertical
-                              size={10}
-                              style={{ color: "#CBD5E1", position: "absolute", bottom: 6, right: 4 }}
-                            />
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onEditDetail?.(active.id, key);
-                              }}
-                              className="cursor-pointer rounded-[5px] border bg-white text-[10px]"
-                              style={{
-                                position: "absolute",
-                                top: 6,
-                                right: 22,
-                                borderColor: "#E2E8F0",
-                                color: "#94A3B8",
-                                padding: "2px 6px",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              Editar en detalle
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Eliminar sesión"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeSession(key);
-                                setSelected((prev) => prev.filter((k) => k !== key));
-                              }}
-                              onMouseEnter={() => setXHover(key)}
-                              onMouseLeave={() => setXHover((h) => (h === key ? null : h))}
-                              className="flex cursor-pointer items-center justify-center rounded-full"
-                              style={{
-                                position: "absolute",
-                                top: 6,
-                                right: 4,
-                                width: 16,
-                                height: 16,
-                                backgroundColor: xHover === key ? "#EF4444" : "rgba(17,24,39,0.08)",
-                                border: "none",
-                                padding: 0,
-                              }}
-                            >
-                              <X size={10} style={{ color: xHover === key ? "#FFFFFF" : "#64748B" }} />
-                            </button>
-                          </>
-                        ) : null}
+                    {/* The new-session editor shares the list (same React key) so it isn't remounted —
+                        and doesn't lose focus — when its first autosave turns it into a saved session. */}
+                    {(addingNew ? [...keys, newKey] : keys).map((key) => (
+                      <div key={key}>
+                        {editing === key && draft
+                          ? renderEditor()
+                          : renderChip(key, active.sessions[key]!, keys.length > 1 || addingNew)}
                       </div>
-                    ) : (
-                      <div className="flex h-full flex-col items-center justify-center gap-1">
+                    ))}
+                    {empty ? (
+                      <div className="flex flex-1 flex-col items-center justify-center gap-1">
                         <Plus size={16} style={{ color: "#94A3B8" }} />
                         <span
                           className="text-[11px]"
                           style={{
                             color: "#94A3B8",
-                            opacity: hoverCell === key ? 1 : 0,
+                            opacity: hoverCell === cell ? 1 : 0,
                             transition: "opacity .15s",
                           }}
                         >
                           Agregar
                         </span>
                       </div>
-                    )}
+                    ) : !addingNew ? (
+                      <button
+                        type="button"
+                        aria-label="Agregar otra sesión este día"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openCell(newKey);
+                        }}
+                        className="flex cursor-pointer flex-row items-center justify-center gap-1 rounded-[6px] text-[10px] hover:bg-[#F8FAFC]"
+                        style={{
+                          color: "#94A3B8",
+                          padding: "3px 0",
+                          opacity: hoverCell === cell ? 1 : 0,
+                          transition: "opacity .15s",
+                        }}
+                      >
+                        <Plus size={11} style={{ color: "#94A3B8" }} />
+                        Agregar
+                      </button>
+                    ) : null}
                   </div>
                 );
               })}
@@ -1148,32 +1228,6 @@ export const LabCanvas = forwardRef<
                 {label}
               </button>
             ))}
-            <button
-              type="button"
-              onMouseEnter={() => setSoonHover(true)}
-              onMouseLeave={() => setSoonHover(false)}
-              className="relative flex w-full flex-row items-center gap-2 rounded-[6px] text-left text-[12px] hover:bg-[#F8FAFC]"
-              style={{ padding: "7px 10px", color: "#374151" }}
-            >
-              <Move size={12} style={{ color: "#94A3B8" }} />
-              Mover a…
-              {soonHover ? (
-                <span
-                  className="rounded-[6px] text-[10px]"
-                  style={{
-                    position: "absolute",
-                    left: "100%",
-                    marginLeft: 6,
-                    backgroundColor: "#111827",
-                    color: "#FFFFFF",
-                    padding: "3px 8px",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Próximamente
-                </span>
-              ) : null}
-            </button>
             <div style={{ height: 1, backgroundColor: "#F1F5F9", margin: "4px 0" }} />
             <button
               type="button"

@@ -50,8 +50,11 @@ export async function materializeProgramForAthlete(
 
   const { data: templateSessions } = await admin
     .from("program_sessions")
-    .select("week_index, day_index, name, exercises, circuits")
-    .eq("program_id", programId);
+    .select("week_index, day_index, slot, name, exercises, circuits")
+    .eq("program_id", programId)
+    .order("week_index")
+    .order("day_index")
+    .order("slot");
   if (!templateSessions?.length) return;
 
   const monday = mondayOf(startDate);

@@ -318,8 +318,8 @@ function LabPage() {
               programs={programs.map((p) => p.name)}
               athletes={athletes.map((a) => ({ id: a.id, name: a.name }))}
               onEditDetail={(programId, key) => {
-                const [week, day] = key.split("-");
-                navigate({ to: "/sesiones/$sessionId", params: { sessionId: "canvas" }, search: { programId, week, day } });
+                const [week, day, slot = "0"] = key.split("-");
+                navigate({ to: "/sesiones/$sessionId", params: { sessionId: "canvas" }, search: { programId, week, day, slot } });
               }}
             />
           ) : null}
