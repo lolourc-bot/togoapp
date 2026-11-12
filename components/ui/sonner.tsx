@@ -20,10 +20,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         unstyled: true,
         classNames: {
-          toast: `${base} !bg-[#FFFFFF] !text-[#374151] !border !border-[#E2E8F0]`,
-          success: "!bg-[#111827] !text-[#FFFFFF] !font-medium !border-[#111827]",
-          error: "!bg-[#FEF2F2] !text-[#374151] !border-[#FECACA]",
-          info: "!bg-[#FFFFFF] !text-[#374151] !border-[#E2E8F0]",
+          toast: `${base} !border`,
           description: "!text-[#94A3B8]",
         },
       }}

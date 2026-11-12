@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { UserType } from "@/lib/user-context";
+import { supabase } from "@/lib/supabase";
+import { getCoachId } from "@/lib/programs";
+import { fetchAthleteCoachId } from "@/lib/wellness";
 
 export type NotifCat = "Entrenamiento" | "Mensajes" | "Institución";
 export type Notif = {
@@ -22,44 +25,94 @@ export const NOTIF_STYLE: Record<string, { bg: string; fg: string }> = {
   noWeek: { bg: "#F1F5F9", fg: "#64748B" },
 };
 
-const ATHLETE: Notif[] = [
-  { id: "a1", kind: "session", title: "Nueva sesión publicada", body: "Tu entrenador publicó una sesión para mañana: Fuerza · Piernas.", time: "Hace 10 min", day: "Hoy", cat: "Entrenamiento", unread: true, only: ["coached_athlete", "gym_member"] },
-  { id: "a2", kind: "message", title: "Mensaje nuevo", body: "Martín Gutiérrez: Revisá el video de la sentadilla.", time: "Hace 35 min", day: "Hoy", cat: "Mensajes", unread: true },
-  { id: "a3", kind: "class", title: "Clase disponible", body: "Hay un lugar disponible en CrossFit 09:00 del miércoles.", time: "Hace 1 h", day: "Hoy", cat: "Institución", unread: true, only: ["gym_member"] },
-  { id: "a4", kind: "team", title: "Práctica del equipo", body: "Práctica Sub-16 mañana a las 09:00 en Campo principal.", time: "Hace 2 h", day: "Hoy", cat: "Institución", unread: true, only: ["club_athlete"] },
-  { id: "a5", kind: "reminder", title: "Recordatorio de sesión", body: "Tenés una sesión programada para hoy a las 18:00.", time: "08:00", day: "Hoy", cat: "Entrenamiento", unread: false, only: ["coached_athlete", "club_athlete", "gym_member"] },
-  { id: "a6", kind: "done", title: "Sesión completada", body: "Registraste la sesión de hoy. ¡Seguí así!", time: "Ayer 19:40", day: "Ayer", cat: "Entrenamiento", unread: false, only: ["coached_athlete", "club_athlete", "gym_member"] },
-  { id: "a7", kind: "fee", title: "Cuota próxima a vencer", body: "Tu membresía mensual vence en 3 días.", time: "Ayer 10:15", day: "Ayer", cat: "Institución", unread: false, only: ["gym_member"] },
-  { id: "a8", kind: "coach", title: "Coach asignado", body: "CrossFit Palermo te asignó a Martín Gutiérrez como coach personal.", time: "Lun 6 oct · 12:30", day: "Lun 6 oct", cat: "Institución", unread: false, only: ["gym_member"] },
-];
+function timeLabel(iso: string) {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
-const COACH: Notif[] = [
-  { id: "c1", kind: "done", title: "Atleta completó sesión", body: "Santiago Pérez completó la sesión de Fuerza · Piernas.", time: "Hace 5 min", day: "Hoy", cat: "Entrenamiento", unread: true },
-  { id: "c2", kind: "message", title: "Mensaje nuevo", body: "Valentina García: '¿Puedo cambiar el día de mañana?'", time: "Hace 20 min", day: "Hoy", cat: "Mensajes", unread: true },
-  { id: "c3", kind: "newAthlete", title: "Nuevo atleta asignado", body: "CrossFit Palermo te asignó un nuevo atleta: Lucas Herrera.", time: "Hace 1 h", day: "Hoy", cat: "Institución", unread: true },
-  { id: "c4", kind: "inactive", title: "Atleta sin actividad", body: "Martina López no registra actividad hace 7 días.", time: "09:00", day: "Hoy", cat: "Entrenamiento", unread: false },
-  { id: "c5", kind: "request", title: "Solicitud de coaching", body: "Un socio de CrossFit Palermo solicitó coach personal.", time: "Ayer 17:10", day: "Ayer", cat: "Institución", unread: false },
-  { id: "c6", kind: "noWeek", title: "Semana sin sesiones publicadas", body: "Equipo A no tiene sesiones publicadas para la próxima semana.", time: "Ayer 09:00", day: "Ayer", cat: "Entrenamiento", unread: false },
-];
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const that = new Date(d);
+  that.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today.getTime() - that.getTime()) / 86_400_000);
+  if (diffDays === 0) return "Hoy";
+  if (diffDays === 1) return "Ayer";
+  return d.toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" });
+}
 
-const store: Record<"athlete" | "coach", Notif[]> = { athlete: ATHLETE, coach: COACH };
-const listeners = new Set<() => void>();
-const emit = () => listeners.forEach((l) => l());
+function catForKind(kind: string): NotifCat {
+  if (kind === "message") return "Mensajes";
+  return "Entrenamiento";
+}
 
-export function useNotifs(who: "athlete" | "coach") {
-  const [list, setList] = useState(store[who]);
+type NotifRow = { id: string; kind: string; title: string; body: string | null; created_at: string; read_at: string | null };
+
+function rowToNotif(row: NotifRow): Notif {
+  return {
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    body: row.body ?? "",
+    time: timeLabel(row.created_at),
+    day: dayLabel(row.created_at),
+    cat: catForKind(row.kind),
+    unread: !row.read_at,
+  };
+}
+
+export function useNotifs(who: "athlete" | "coach", athleteId?: string) {
+  const [list, setList] = useState<Notif[]>([]);
+  const [coachId, setCoachId] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    const cid = who === "coach" ? await getCoachId() : athleteId ? await fetchAthleteCoachId(athleteId) : null;
+    if (!cid) return;
+    setCoachId(cid);
+    let query = supabase
+      .from("notifications")
+      .select("id, kind, title, body, created_at, read_at")
+      .eq("coach_id", cid)
+      .eq("audience", who)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    if (who === "athlete" && athleteId) query = query.eq("athlete_id", athleteId);
+    const { data } = await query;
+    setList((data ?? []).map(rowToNotif));
+  }, [who, athleteId]);
+
   useEffect(() => {
-    const s = () => setList(store[who]);
-    listeners.add(s);
-    return () => { listeners.delete(s); };
-  }, [who]);
+    reload();
+  }, [reload]);
+
   return {
     list,
-    markAll: () => { store[who] = store[who].map((n) => ({ ...n, unread: false })); emit(); },
-    markRead: (id: string) => { store[who] = store[who].map((n) => (n.id === id ? { ...n, unread: false } : n)); emit(); },
+    markAll: () => {
+      if (!coachId) return;
+      let query = supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("coach_id", coachId).eq("audience", who).is("read_at", null);
+      if (who === "athlete" && athleteId) query = query.eq("athlete_id", athleteId);
+      query.then(() => reload());
+    },
+    markRead: (id: string) => {
+      supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", id).then(() => reload());
+    },
   };
 }
 
 export function forUser(list: Notif[], t: UserType) {
   return list.filter((n) => !n.only || n.only.includes(t));
+}
+
+export async function notifySessionsPublished(coachId: string, athleteId: string, count: number) {
+  if (count <= 0) return;
+  const title = count === 1 ? "Nueva sesión publicada" : "Nuevas sesiones publicadas";
+  const body = count === 1 ? "Tu coach publicó una sesión nueva." : `Tu coach publicó ${count} sesiones nuevas.`;
+  await supabase
+    .from("notifications")
+    .insert({ coach_id: coachId, athlete_id: athleteId, audience: "athlete", kind: "session", title, body })
+    .then(
+      () => {},
+      () => {},
+    );
 }

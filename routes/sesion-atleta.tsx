@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   ArrowLeftRight,
   BarChart3,
@@ -20,16 +21,19 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { fetchSessionForExecution, syncExerciseSets, completeSessionExecution } from "@/lib/session-execution";
 
 
 export const Route = createFileRoute("/sesion-atleta")({
+  validateSearch: (search: Record<string, unknown>): { sessionId?: string } =>
+    typeof search["sessionId"] === "string" ? { sessionId: search["sessionId"] as string } : {},
   head: () => ({
     meta: [
-      { title: "Vista del atleta · Fuerza — Jueves | TOGO" },
+      { title: "Vista del atleta | TOGO" },
       {
         name: "description",
         content:
-          "Así ve el atleta su sesión Fuerza — Jueves desde el celular: series, pesos y descansos en vivo.",
+          "Así ve el atleta su sesión desde el celular: series, pesos y descansos en vivo.",
       },
       { property: "og:title", content: "Vista del atleta · TOGO" },
       {
@@ -51,7 +55,7 @@ type SetRow = {
   noteOpen: boolean;
   manual?: boolean;
 };
-type Exercise = { label: string; name: string; note?: string; suggestion: string; sets: SetRow[] };
+type Exercise = { id: string; label: string; name: string; note?: string; suggestion: string; sets: SetRow[] };
 type CircuitType = "AMRAP" | "EMOM" | "TABATA" | "ASAP" | "Custom";
 type CircuitItem = { name: string; reps: string };
 type Circuit = {
@@ -79,65 +83,6 @@ const s = (reps: string, weight: string, done = false): SetRow => ({
   note: "",
   noteOpen: false,
 });
-
-const BLOCKS: Block[] = [
-  {
-    letter: "A",
-    exercises: [
-      {
-        label: "A1",
-        name: "Sentadilla trasera",
-        note: "Profundidad completa, torso firme.",
-        suggestion: "95 kg — basado en tu última sesión",
-        sets: [s("8", "90", true), s("8", "90", true), s("8", "95", true), s("8", "95", true)],
-      },
-    ],
-  },
-  {
-    letter: "B",
-    exercises: [
-      {
-        label: "B1",
-        name: "Press de banca",
-        note: "Mantené los codos a 45°, bajá controlado.",
-        suggestion: "72.5 kg — basado en tu última sesión",
-        sets: [s("10", "70", true), s("10", "70", true), s("10", "70"), s("10", "70")],
-      },
-      {
-        label: "B2",
-        name: "Peso muerto rumano",
-        suggestion: "60 kg — basado en tu última sesión",
-        sets: [s("12", "60"), s("12", "60"), s("12", "60")],
-      },
-    ],
-  },
-  {
-    letter: "C",
-    exercises: [
-      {
-        label: "C1",
-        name: "Hip thrust",
-        suggestion: "80 kg — basado en tu última sesión",
-        sets: [s("12", "80"), s("12", "80"), s("12", "80")],
-      },
-    ],
-  },
-  {
-    letter: "D",
-    exercises: [],
-    circuit: {
-      type: "AMRAP",
-      name: "Finisher",
-      rounds: 3,
-      minutes: 8,
-      items: [
-        { name: "Swing con kettlebell", reps: "12 reps" },
-        { name: "Burpees", reps: "10 reps" },
-        { name: "Plancha con peso", reps: "30 seg" },
-      ],
-    },
-  },
-];
 
 
 const REST_SECONDS = 90;
@@ -747,7 +692,10 @@ function Sheet({
 
 function AthleteMobileSession() {
   const navigate = useNavigate();
-  const [blocks, setBlocks] = useState<Block[]>(BLOCKS);
+  const { sessionId } = Route.useSearch();
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [sessionMeta, setSessionMeta] = useState<{ id: string; coachId: string; name: string } | null>(null);
+  const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState(0);
   const [resting, setResting] = useState(false);
   const [remaining, setRemaining] = useState(REST_SECONDS);
@@ -762,10 +710,35 @@ function AthleteMobileSession() {
   const touchX = useRef<number | null>(null);
 
   useEffect(() => {
+    if (!sessionId) { setLoading(false); return; }
+    fetchSessionForExecution(sessionId).then((s) => {
+      if (s) {
+        setSessionMeta({ id: s.id, coachId: s.coachId, name: s.name });
+        setBlocks(s.blocks);
+      }
+      setLoading(false);
+    });
+  }, [sessionId]);
+
+  useEffect(() => {
     if (!resting) return;
     const id = window.setInterval(() => setRemaining((r) => (r > 0 ? r - 1 : 0)), 1000);
     return () => window.clearInterval(id);
   }, [resting]);
+
+  if (loading) {
+    return <div style={{ padding: 40, color: "#94A3B8" }}>Cargando sesión…</div>;
+  }
+  if (!sessionMeta || blocks.length === 0) {
+    return (
+      <div className="flex min-h-screen items-center justify-center" style={{ padding: 24, color: "#94A3B8" }}>
+        No hay sesión seleccionada.{" "}
+        <Link to="/hoy" style={{ color: "#111827", marginLeft: 6 }}>
+          Volver
+        </Link>
+      </div>
+    );
+  }
 
   const block = blocks[current]!;
   const doneBlocks = blocks.findIndex((b) => b.exercises.some((e) => e.sets.some((x) => !x.done)));
@@ -776,7 +749,14 @@ function AthleteMobileSession() {
     setBlocks((prev) => prev.map((b, bi) => (bi !== current ? b : fn(b))));
 
   const patchExercise = (exIdx: number, fn: (e: Exercise) => Exercise) =>
-    patchBlock((b) => ({ ...b, exercises: b.exercises.map((e, ei) => (ei === exIdx ? fn(e) : e)) }));
+    patchBlock((b) => {
+      const exercises = b.exercises.map((e, ei) => (ei === exIdx ? fn(e) : e));
+      const changed = exercises[exIdx]!;
+      syncExerciseSets(sessionMeta.coachId, sessionMeta.id, changed.id, changed.sets).catch(() =>
+        toast.error("No se pudo guardar"),
+      );
+      return { ...b, exercises };
+    });
 
   const updateSet = (exIdx: number, setIdx: number, patch: Partial<SetRow>) =>
     patchExercise(exIdx, (e) => ({
@@ -821,7 +801,9 @@ function AthleteMobileSession() {
       exercises: b.exercises.map((e) => ({ ...e, sets: e.sets.map((x) => ({ ...x, done: true })) })),
     }));
     if (current === blocks.length - 1) {
-      navigate({ to: "/celebracion" });
+      completeSessionExecution(sessionMeta.coachId, sessionMeta.id)
+        .catch(() => toast.error("No se pudo marcar la sesión como completada"))
+        .finally(() => navigate({ to: "/celebracion", search: { sessionId: sessionMeta.id } }));
       return;
     }
     setCurrent((c) => Math.min(blocks.length - 1, c + 1));
@@ -852,7 +834,7 @@ function AthleteMobileSession() {
           </Link>
           <div className="flex flex-col items-center">
             <span className="text-[13px] font-normal" style={{ color: "#64748B" }}>
-              Fuerza — Jueves
+              {sessionMeta.name}
             </span>
             <span
               style={{
@@ -987,9 +969,11 @@ function AthleteMobileSession() {
                     )}
                   </div>
                 </div>
-                <div className="text-[11px] italic" style={{ color: "#64748B", marginTop: 4 }}>
-                  💡 Sugerencia: {ex.suggestion}
-                </div>
+                {ex.suggestion ? (
+                  <div className="text-[11px] italic" style={{ color: "#64748B", marginTop: 4 }}>
+                    💡 Sugerencia: {ex.suggestion}
+                  </div>
+                ) : null}
               </div>
 
               <div

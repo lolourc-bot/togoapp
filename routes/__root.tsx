@@ -1,12 +1,15 @@
 import { Toaster } from "@/components/ui/sonner";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { AthleteTimer } from "@/components/togo/AthleteTimer";
+import { ToguitoAssistant } from "@/components/togo/ToguitoAssistant";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
+  useNavigate,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -80,6 +83,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "color-scheme", content: "light" },
       { title: "TOGO — Coaching deportivo" },
       { name: "description", content: "Plataforma de entrenamiento para coaches, atletas e instituciones." },
       { name: "author", content: "Lovable" },
@@ -123,15 +127,50 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+// Panel grande de escritorio para coaches (Sidebar) — no tiene equivalente en la app mobile
+// de coach, así que si alguien llega acá desde un celular lo mandamos a /coach-app en vez de
+// mostrarle el panel grande apretado en una pantalla chica. "/" queda afuera a propósito:
+// routes/index.tsx ya resuelve esa redirección con el chequeo de rol (atleta/institución/coach).
+const DESKTOP_COACH_PATH_PREFIXES = [
+  "/atletas", "/equipos", "/biblioteca", "/marketplace-coach", "/facturacion",
+  "/mensajes", "/bienestar", "/lab", "/configuracion", "/coach-notificaciones", "/sesiones",
+];
+
+function DeviceGuard() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isMobile = window.innerWidth < 768;
+    const isDesktopCoachPath = DESKTOP_COACH_PATH_PREFIXES.some((p) => pathname.startsWith(p));
+    // Ojo: a propósito NO redirigimos en sentido contrario (desktop -> "/" al entrar a
+    // /coach-app). Mientras se está diseñando la app mobile, hace falta poder abrirla desde
+    // una compu para iterar rápido sin depender de un celu/túnel.
+    if (isMobile && isDesktopCoachPath) {
+      navigate({ to: "/coach-app" });
+    }
+  }, [pathname, navigate]);
+
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // La app mobile de coach tiene su propio Toguito (el planificador por voz, en el tab de
+  // abajo) — el bubble flotante global de dudas administrativas no entra ahí: queda fijo
+  // abajo a la derecha y tapa justo ese tab.
+  const showGlobalToguito = !pathname.startsWith("/coach-app");
 
   return (
     <QueryClientProvider client={queryClient}>
+      <DeviceGuard />
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
       <Toaster />
       <AthleteTimer />
+      {showGlobalToguito ? <ToguitoAssistant /> : null}
     </QueryClientProvider>
   );
 }

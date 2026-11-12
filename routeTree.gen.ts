@@ -25,8 +25,11 @@ import { Route as ExplorarRouteImport } from './routes/explorar'
 import { Route as FacturacionRouteImport } from './routes/facturacion'
 import { Route as HoyRouteImport } from './routes/hoy'
 import { Route as IngresarRouteImport } from './routes/ingresar'
+import { Route as IngresarAtletaRouteImport } from './routes/ingresar-atleta'
+import { Route as IngresarSocioRouteImport } from './routes/ingresar-socio'
 import { Route as InstitucionRouteImport } from './routes/institucion'
 import { Route as LabRouteImport } from './routes/lab'
+import { Route as LegalRouteImport } from './routes/legal'
 import { Route as MarketplaceRouteImport } from './routes/marketplace'
 import { Route as MarketplaceCoachRouteImport } from './routes/marketplace-coach'
 import { Route as MarketplaceCoachesRouteImport } from './routes/marketplace-coaches'
@@ -39,13 +42,31 @@ import { Route as ProgresoRouteImport } from './routes/progreso'
 import { Route as SesionAtletaRouteImport } from './routes/sesion-atleta'
 import { Route as TimerRouteImport } from './routes/timer'
 import { Route as WellnessRouteImport } from './routes/wellness'
+import { Route as AdminVideosRouteImport } from './routes/admin.videos'
+import { Route as ApiGoogleOauthCallbackRouteImport } from './routes/api.google-oauth-callback'
+import { Route as ApiMpOauthCallbackRouteImport } from './routes/api.mp-oauth-callback'
+import { Route as ApiMpWebhookRouteImport } from './routes/api.mp-webhook'
+import { Route as ApiStravaCallbackRouteImport } from './routes/api.strava-callback'
+import { Route as ApiStravaWebhookRouteImport } from './routes/api.strava-webhook'
+import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe-webhook'
 import { Route as AtletasIndexRouteImport } from './routes/atletas.index'
 import { Route as AtletasAthleteIdRouteImport } from './routes/atletas.$athleteId'
 import { Route as ChatIndexRouteImport } from './routes/chat/index'
 import { Route as ChatCoachIdRouteImport } from './routes/chat/$coachId'
+import { Route as CoachAppIndexRouteImport } from './routes/coach-app.index'
+import { Route as CoachAppEquiposRouteImport } from './routes/coach-app.equipos'
+import { Route as CoachAppIngresarRouteImport } from './routes/coach-app.ingresar'
+import { Route as CoachAppPerfilRouteImport } from './routes/coach-app.perfil'
+import { Route as CoachAppToguitoRouteImport } from './routes/coach-app.toguito'
+import { Route as CompletarCuotaMemberIdRouteImport } from './routes/completar-cuota.$memberId'
+import { Route as CompletarPagoPurchaseIdRouteImport } from './routes/completar-pago.$purchaseId'
+import { Route as InstitucionInvitacionTokenRouteImport } from './routes/institucion-invitacion.$token'
 import { Route as MiEquipoTeamIdRouteImport } from './routes/mi-equipo.$teamId'
 import { Route as PerfilCoachCoachIdRouteImport } from './routes/perfil-coach.$coachId'
 import { Route as SesionesSessionIdRouteImport } from './routes/sesiones.$sessionId'
+import { Route as CoachAppAtletaAthleteIdRouteImport } from './routes/coach-app.atleta.$athleteId'
+import { Route as CoachAppEquipoTeamIdRouteImport } from './routes/coach-app.equipo.$teamId'
+import { Route as CoachAppSesionAthleteIdRouteImport } from './routes/coach-app.sesion.$athleteId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -127,6 +148,16 @@ const IngresarRoute = IngresarRouteImport.update({
   path: '/ingresar',
   getParentRoute: () => rootRouteImport,
 } as any)
+const IngresarAtletaRoute = IngresarAtletaRouteImport.update({
+  id: '/ingresar-atleta',
+  path: '/ingresar-atleta',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IngresarSocioRoute = IngresarSocioRouteImport.update({
+  id: '/ingresar-socio',
+  path: '/ingresar-socio',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InstitucionRoute = InstitucionRouteImport.update({
   id: '/institucion',
   path: '/institucion',
@@ -135,6 +166,11 @@ const InstitucionRoute = InstitucionRouteImport.update({
 const LabRoute = LabRouteImport.update({
   id: '/lab',
   path: '/lab',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalRoute = LegalRouteImport.update({
+  id: '/legal',
+  path: '/legal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MarketplaceRoute = MarketplaceRouteImport.update({
@@ -197,6 +233,41 @@ const WellnessRoute = WellnessRouteImport.update({
   path: '/wellness',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminVideosRoute = AdminVideosRouteImport.update({
+  id: '/admin/videos',
+  path: '/admin/videos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGoogleOauthCallbackRoute = ApiGoogleOauthCallbackRouteImport.update({
+  id: '/api/google-oauth-callback',
+  path: '/api/google-oauth-callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMpOauthCallbackRoute = ApiMpOauthCallbackRouteImport.update({
+  id: '/api/mp-oauth-callback',
+  path: '/api/mp-oauth-callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMpWebhookRoute = ApiMpWebhookRouteImport.update({
+  id: '/api/mp-webhook',
+  path: '/api/mp-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStravaCallbackRoute = ApiStravaCallbackRouteImport.update({
+  id: '/api/strava-callback',
+  path: '/api/strava-callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStravaWebhookRoute = ApiStravaWebhookRouteImport.update({
+  id: '/api/strava-webhook',
+  path: '/api/strava-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
+  id: '/api/stripe-webhook',
+  path: '/api/stripe-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AtletasIndexRoute = AtletasIndexRouteImport.update({
   id: '/atletas/',
   path: '/atletas/',
@@ -217,6 +288,47 @@ const ChatCoachIdRoute = ChatCoachIdRouteImport.update({
   path: '/$coachId',
   getParentRoute: () => ChatRoute,
 } as any)
+const CoachAppIndexRoute = CoachAppIndexRouteImport.update({
+  id: '/coach-app/',
+  path: '/coach-app/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CoachAppEquiposRoute = CoachAppEquiposRouteImport.update({
+  id: '/coach-app/equipos',
+  path: '/coach-app/equipos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CoachAppIngresarRoute = CoachAppIngresarRouteImport.update({
+  id: '/coach-app/ingresar',
+  path: '/coach-app/ingresar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CoachAppPerfilRoute = CoachAppPerfilRouteImport.update({
+  id: '/coach-app/perfil',
+  path: '/coach-app/perfil',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CoachAppToguitoRoute = CoachAppToguitoRouteImport.update({
+  id: '/coach-app/toguito',
+  path: '/coach-app/toguito',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompletarCuotaMemberIdRoute = CompletarCuotaMemberIdRouteImport.update({
+  id: '/completar-cuota/$memberId',
+  path: '/completar-cuota/$memberId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompletarPagoPurchaseIdRoute = CompletarPagoPurchaseIdRouteImport.update({
+  id: '/completar-pago/$purchaseId',
+  path: '/completar-pago/$purchaseId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InstitucionInvitacionTokenRoute =
+  InstitucionInvitacionTokenRouteImport.update({
+    id: '/institucion-invitacion/$token',
+    path: '/institucion-invitacion/$token',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const MiEquipoTeamIdRoute = MiEquipoTeamIdRouteImport.update({
   id: '/mi-equipo/$teamId',
   path: '/mi-equipo/$teamId',
@@ -230,6 +342,21 @@ const PerfilCoachCoachIdRoute = PerfilCoachCoachIdRouteImport.update({
 const SesionesSessionIdRoute = SesionesSessionIdRouteImport.update({
   id: '/sesiones/$sessionId',
   path: '/sesiones/$sessionId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CoachAppAtletaAthleteIdRoute = CoachAppAtletaAthleteIdRouteImport.update({
+  id: '/coach-app/atleta/$athleteId',
+  path: '/coach-app/atleta/$athleteId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CoachAppEquipoTeamIdRoute = CoachAppEquipoTeamIdRouteImport.update({
+  id: '/coach-app/equipo/$teamId',
+  path: '/coach-app/equipo/$teamId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CoachAppSesionAthleteIdRoute = CoachAppSesionAthleteIdRouteImport.update({
+  id: '/coach-app/sesion/$athleteId',
+  path: '/coach-app/sesion/$athleteId',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -250,8 +377,11 @@ export interface FileRoutesByFullPath {
   '/facturacion': typeof FacturacionRoute
   '/hoy': typeof HoyRoute
   '/ingresar': typeof IngresarRoute
+  '/ingresar-atleta': typeof IngresarAtletaRoute
+  '/ingresar-socio': typeof IngresarSocioRoute
   '/institucion': typeof InstitucionRoute
   '/lab': typeof LabRoute
+  '/legal': typeof LegalRoute
   '/marketplace': typeof MarketplaceRoute
   '/marketplace-coach': typeof MarketplaceCoachRoute
   '/marketplace-coaches': typeof MarketplaceCoachesRoute
@@ -264,13 +394,31 @@ export interface FileRoutesByFullPath {
   '/sesion-atleta': typeof SesionAtletaRoute
   '/timer': typeof TimerRoute
   '/wellness': typeof WellnessRoute
+  '/admin/videos': typeof AdminVideosRoute
+  '/api/google-oauth-callback': typeof ApiGoogleOauthCallbackRoute
+  '/api/mp-oauth-callback': typeof ApiMpOauthCallbackRoute
+  '/api/mp-webhook': typeof ApiMpWebhookRoute
+  '/api/strava-callback': typeof ApiStravaCallbackRoute
+  '/api/strava-webhook': typeof ApiStravaWebhookRoute
+  '/api/stripe-webhook': typeof ApiStripeWebhookRoute
   '/atletas/$athleteId': typeof AtletasAthleteIdRoute
   '/chat/$coachId': typeof ChatCoachIdRoute
+  '/coach-app/equipos': typeof CoachAppEquiposRoute
+  '/coach-app/ingresar': typeof CoachAppIngresarRoute
+  '/coach-app/perfil': typeof CoachAppPerfilRoute
+  '/coach-app/toguito': typeof CoachAppToguitoRoute
+  '/completar-cuota/$memberId': typeof CompletarCuotaMemberIdRoute
+  '/completar-pago/$purchaseId': typeof CompletarPagoPurchaseIdRoute
+  '/institucion-invitacion/$token': typeof InstitucionInvitacionTokenRoute
   '/mi-equipo/$teamId': typeof MiEquipoTeamIdRoute
   '/perfil-coach/$coachId': typeof PerfilCoachCoachIdRoute
   '/sesiones/$sessionId': typeof SesionesSessionIdRoute
   '/atletas/': typeof AtletasIndexRoute
   '/chat/': typeof ChatIndexRoute
+  '/coach-app/': typeof CoachAppIndexRoute
+  '/coach-app/atleta/$athleteId': typeof CoachAppAtletaAthleteIdRoute
+  '/coach-app/equipo/$teamId': typeof CoachAppEquipoTeamIdRoute
+  '/coach-app/sesion/$athleteId': typeof CoachAppSesionAthleteIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -288,8 +436,11 @@ export interface FileRoutesByTo {
   '/facturacion': typeof FacturacionRoute
   '/hoy': typeof HoyRoute
   '/ingresar': typeof IngresarRoute
+  '/ingresar-atleta': typeof IngresarAtletaRoute
+  '/ingresar-socio': typeof IngresarSocioRoute
   '/institucion': typeof InstitucionRoute
   '/lab': typeof LabRoute
+  '/legal': typeof LegalRoute
   '/marketplace': typeof MarketplaceRoute
   '/marketplace-coach': typeof MarketplaceCoachRoute
   '/marketplace-coaches': typeof MarketplaceCoachesRoute
@@ -302,13 +453,31 @@ export interface FileRoutesByTo {
   '/sesion-atleta': typeof SesionAtletaRoute
   '/timer': typeof TimerRoute
   '/wellness': typeof WellnessRoute
+  '/admin/videos': typeof AdminVideosRoute
+  '/api/google-oauth-callback': typeof ApiGoogleOauthCallbackRoute
+  '/api/mp-oauth-callback': typeof ApiMpOauthCallbackRoute
+  '/api/mp-webhook': typeof ApiMpWebhookRoute
+  '/api/strava-callback': typeof ApiStravaCallbackRoute
+  '/api/strava-webhook': typeof ApiStravaWebhookRoute
+  '/api/stripe-webhook': typeof ApiStripeWebhookRoute
   '/atletas/$athleteId': typeof AtletasAthleteIdRoute
   '/chat/$coachId': typeof ChatCoachIdRoute
+  '/coach-app/equipos': typeof CoachAppEquiposRoute
+  '/coach-app/ingresar': typeof CoachAppIngresarRoute
+  '/coach-app/perfil': typeof CoachAppPerfilRoute
+  '/coach-app/toguito': typeof CoachAppToguitoRoute
+  '/completar-cuota/$memberId': typeof CompletarCuotaMemberIdRoute
+  '/completar-pago/$purchaseId': typeof CompletarPagoPurchaseIdRoute
+  '/institucion-invitacion/$token': typeof InstitucionInvitacionTokenRoute
   '/mi-equipo/$teamId': typeof MiEquipoTeamIdRoute
   '/perfil-coach/$coachId': typeof PerfilCoachCoachIdRoute
   '/sesiones/$sessionId': typeof SesionesSessionIdRoute
   '/atletas': typeof AtletasIndexRoute
   '/chat': typeof ChatIndexRoute
+  '/coach-app': typeof CoachAppIndexRoute
+  '/coach-app/atleta/$athleteId': typeof CoachAppAtletaAthleteIdRoute
+  '/coach-app/equipo/$teamId': typeof CoachAppEquipoTeamIdRoute
+  '/coach-app/sesion/$athleteId': typeof CoachAppSesionAthleteIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -328,8 +497,11 @@ export interface FileRoutesById {
   '/facturacion': typeof FacturacionRoute
   '/hoy': typeof HoyRoute
   '/ingresar': typeof IngresarRoute
+  '/ingresar-atleta': typeof IngresarAtletaRoute
+  '/ingresar-socio': typeof IngresarSocioRoute
   '/institucion': typeof InstitucionRoute
   '/lab': typeof LabRoute
+  '/legal': typeof LegalRoute
   '/marketplace': typeof MarketplaceRoute
   '/marketplace-coach': typeof MarketplaceCoachRoute
   '/marketplace-coaches': typeof MarketplaceCoachesRoute
@@ -342,13 +514,31 @@ export interface FileRoutesById {
   '/sesion-atleta': typeof SesionAtletaRoute
   '/timer': typeof TimerRoute
   '/wellness': typeof WellnessRoute
+  '/admin/videos': typeof AdminVideosRoute
+  '/api/google-oauth-callback': typeof ApiGoogleOauthCallbackRoute
+  '/api/mp-oauth-callback': typeof ApiMpOauthCallbackRoute
+  '/api/mp-webhook': typeof ApiMpWebhookRoute
+  '/api/strava-callback': typeof ApiStravaCallbackRoute
+  '/api/strava-webhook': typeof ApiStravaWebhookRoute
+  '/api/stripe-webhook': typeof ApiStripeWebhookRoute
   '/atletas/$athleteId': typeof AtletasAthleteIdRoute
   '/chat/$coachId': typeof ChatCoachIdRoute
+  '/coach-app/equipos': typeof CoachAppEquiposRoute
+  '/coach-app/ingresar': typeof CoachAppIngresarRoute
+  '/coach-app/perfil': typeof CoachAppPerfilRoute
+  '/coach-app/toguito': typeof CoachAppToguitoRoute
+  '/completar-cuota/$memberId': typeof CompletarCuotaMemberIdRoute
+  '/completar-pago/$purchaseId': typeof CompletarPagoPurchaseIdRoute
+  '/institucion-invitacion/$token': typeof InstitucionInvitacionTokenRoute
   '/mi-equipo/$teamId': typeof MiEquipoTeamIdRoute
   '/perfil-coach/$coachId': typeof PerfilCoachCoachIdRoute
   '/sesiones/$sessionId': typeof SesionesSessionIdRoute
   '/atletas/': typeof AtletasIndexRoute
   '/chat/': typeof ChatIndexRoute
+  '/coach-app/': typeof CoachAppIndexRoute
+  '/coach-app/atleta/$athleteId': typeof CoachAppAtletaAthleteIdRoute
+  '/coach-app/equipo/$teamId': typeof CoachAppEquipoTeamIdRoute
+  '/coach-app/sesion/$athleteId': typeof CoachAppSesionAthleteIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -369,8 +559,11 @@ export interface FileRouteTypes {
     | '/facturacion'
     | '/hoy'
     | '/ingresar'
+    | '/ingresar-atleta'
+    | '/ingresar-socio'
     | '/institucion'
     | '/lab'
+    | '/legal'
     | '/marketplace'
     | '/marketplace-coach'
     | '/marketplace-coaches'
@@ -383,13 +576,31 @@ export interface FileRouteTypes {
     | '/sesion-atleta'
     | '/timer'
     | '/wellness'
+    | '/admin/videos'
+    | '/api/google-oauth-callback'
+    | '/api/mp-oauth-callback'
+    | '/api/mp-webhook'
+    | '/api/strava-callback'
+    | '/api/strava-webhook'
+    | '/api/stripe-webhook'
     | '/atletas/$athleteId'
     | '/chat/$coachId'
+    | '/coach-app/equipos'
+    | '/coach-app/ingresar'
+    | '/coach-app/perfil'
+    | '/coach-app/toguito'
+    | '/completar-cuota/$memberId'
+    | '/completar-pago/$purchaseId'
+    | '/institucion-invitacion/$token'
     | '/mi-equipo/$teamId'
     | '/perfil-coach/$coachId'
     | '/sesiones/$sessionId'
     | '/atletas/'
     | '/chat/'
+    | '/coach-app/'
+    | '/coach-app/atleta/$athleteId'
+    | '/coach-app/equipo/$teamId'
+    | '/coach-app/sesion/$athleteId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -407,8 +618,11 @@ export interface FileRouteTypes {
     | '/facturacion'
     | '/hoy'
     | '/ingresar'
+    | '/ingresar-atleta'
+    | '/ingresar-socio'
     | '/institucion'
     | '/lab'
+    | '/legal'
     | '/marketplace'
     | '/marketplace-coach'
     | '/marketplace-coaches'
@@ -421,13 +635,31 @@ export interface FileRouteTypes {
     | '/sesion-atleta'
     | '/timer'
     | '/wellness'
+    | '/admin/videos'
+    | '/api/google-oauth-callback'
+    | '/api/mp-oauth-callback'
+    | '/api/mp-webhook'
+    | '/api/strava-callback'
+    | '/api/strava-webhook'
+    | '/api/stripe-webhook'
     | '/atletas/$athleteId'
     | '/chat/$coachId'
+    | '/coach-app/equipos'
+    | '/coach-app/ingresar'
+    | '/coach-app/perfil'
+    | '/coach-app/toguito'
+    | '/completar-cuota/$memberId'
+    | '/completar-pago/$purchaseId'
+    | '/institucion-invitacion/$token'
     | '/mi-equipo/$teamId'
     | '/perfil-coach/$coachId'
     | '/sesiones/$sessionId'
     | '/atletas'
     | '/chat'
+    | '/coach-app'
+    | '/coach-app/atleta/$athleteId'
+    | '/coach-app/equipo/$teamId'
+    | '/coach-app/sesion/$athleteId'
   id:
     | '__root__'
     | '/'
@@ -446,8 +678,11 @@ export interface FileRouteTypes {
     | '/facturacion'
     | '/hoy'
     | '/ingresar'
+    | '/ingresar-atleta'
+    | '/ingresar-socio'
     | '/institucion'
     | '/lab'
+    | '/legal'
     | '/marketplace'
     | '/marketplace-coach'
     | '/marketplace-coaches'
@@ -460,13 +695,31 @@ export interface FileRouteTypes {
     | '/sesion-atleta'
     | '/timer'
     | '/wellness'
+    | '/admin/videos'
+    | '/api/google-oauth-callback'
+    | '/api/mp-oauth-callback'
+    | '/api/mp-webhook'
+    | '/api/strava-callback'
+    | '/api/strava-webhook'
+    | '/api/stripe-webhook'
     | '/atletas/$athleteId'
     | '/chat/$coachId'
+    | '/coach-app/equipos'
+    | '/coach-app/ingresar'
+    | '/coach-app/perfil'
+    | '/coach-app/toguito'
+    | '/completar-cuota/$memberId'
+    | '/completar-pago/$purchaseId'
+    | '/institucion-invitacion/$token'
     | '/mi-equipo/$teamId'
     | '/perfil-coach/$coachId'
     | '/sesiones/$sessionId'
     | '/atletas/'
     | '/chat/'
+    | '/coach-app/'
+    | '/coach-app/atleta/$athleteId'
+    | '/coach-app/equipo/$teamId'
+    | '/coach-app/sesion/$athleteId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -486,8 +739,11 @@ export interface RootRouteChildren {
   FacturacionRoute: typeof FacturacionRoute
   HoyRoute: typeof HoyRoute
   IngresarRoute: typeof IngresarRoute
+  IngresarAtletaRoute: typeof IngresarAtletaRoute
+  IngresarSocioRoute: typeof IngresarSocioRoute
   InstitucionRoute: typeof InstitucionRoute
   LabRoute: typeof LabRoute
+  LegalRoute: typeof LegalRoute
   MarketplaceRoute: typeof MarketplaceRoute
   MarketplaceCoachRoute: typeof MarketplaceCoachRoute
   MarketplaceCoachesRoute: typeof MarketplaceCoachesRoute
@@ -500,11 +756,29 @@ export interface RootRouteChildren {
   SesionAtletaRoute: typeof SesionAtletaRoute
   TimerRoute: typeof TimerRoute
   WellnessRoute: typeof WellnessRoute
+  AdminVideosRoute: typeof AdminVideosRoute
+  ApiGoogleOauthCallbackRoute: typeof ApiGoogleOauthCallbackRoute
+  ApiMpOauthCallbackRoute: typeof ApiMpOauthCallbackRoute
+  ApiMpWebhookRoute: typeof ApiMpWebhookRoute
+  ApiStravaCallbackRoute: typeof ApiStravaCallbackRoute
+  ApiStravaWebhookRoute: typeof ApiStravaWebhookRoute
+  ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   AtletasAthleteIdRoute: typeof AtletasAthleteIdRoute
+  CoachAppEquiposRoute: typeof CoachAppEquiposRoute
+  CoachAppIngresarRoute: typeof CoachAppIngresarRoute
+  CoachAppPerfilRoute: typeof CoachAppPerfilRoute
+  CoachAppToguitoRoute: typeof CoachAppToguitoRoute
+  CompletarCuotaMemberIdRoute: typeof CompletarCuotaMemberIdRoute
+  CompletarPagoPurchaseIdRoute: typeof CompletarPagoPurchaseIdRoute
+  InstitucionInvitacionTokenRoute: typeof InstitucionInvitacionTokenRoute
   MiEquipoTeamIdRoute: typeof MiEquipoTeamIdRoute
   PerfilCoachCoachIdRoute: typeof PerfilCoachCoachIdRoute
   SesionesSessionIdRoute: typeof SesionesSessionIdRoute
   AtletasIndexRoute: typeof AtletasIndexRoute
+  CoachAppIndexRoute: typeof CoachAppIndexRoute
+  CoachAppAtletaAthleteIdRoute: typeof CoachAppAtletaAthleteIdRoute
+  CoachAppEquipoTeamIdRoute: typeof CoachAppEquipoTeamIdRoute
+  CoachAppSesionAthleteIdRoute: typeof CoachAppSesionAthleteIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -621,6 +895,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IngresarRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ingresar-atleta': {
+      id: '/ingresar-atleta'
+      path: '/ingresar-atleta'
+      fullPath: '/ingresar-atleta'
+      preLoaderRoute: typeof IngresarAtletaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ingresar-socio': {
+      id: '/ingresar-socio'
+      path: '/ingresar-socio'
+      fullPath: '/ingresar-socio'
+      preLoaderRoute: typeof IngresarSocioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/institucion': {
       id: '/institucion'
       path: '/institucion'
@@ -633,6 +921,13 @@ declare module '@tanstack/react-router' {
       path: '/lab'
       fullPath: '/lab'
       preLoaderRoute: typeof LabRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal': {
+      id: '/legal'
+      path: '/legal'
+      fullPath: '/legal'
+      preLoaderRoute: typeof LegalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/marketplace': {
@@ -719,6 +1014,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WellnessRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/videos': {
+      id: '/admin/videos'
+      path: '/admin/videos'
+      fullPath: '/admin/videos'
+      preLoaderRoute: typeof AdminVideosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/google-oauth-callback': {
+      id: '/api/google-oauth-callback'
+      path: '/api/google-oauth-callback'
+      fullPath: '/api/google-oauth-callback'
+      preLoaderRoute: typeof ApiGoogleOauthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mp-oauth-callback': {
+      id: '/api/mp-oauth-callback'
+      path: '/api/mp-oauth-callback'
+      fullPath: '/api/mp-oauth-callback'
+      preLoaderRoute: typeof ApiMpOauthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mp-webhook': {
+      id: '/api/mp-webhook'
+      path: '/api/mp-webhook'
+      fullPath: '/api/mp-webhook'
+      preLoaderRoute: typeof ApiMpWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/strava-callback': {
+      id: '/api/strava-callback'
+      path: '/api/strava-callback'
+      fullPath: '/api/strava-callback'
+      preLoaderRoute: typeof ApiStravaCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/strava-webhook': {
+      id: '/api/strava-webhook'
+      path: '/api/strava-webhook'
+      fullPath: '/api/strava-webhook'
+      preLoaderRoute: typeof ApiStravaWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/stripe-webhook': {
+      id: '/api/stripe-webhook'
+      path: '/api/stripe-webhook'
+      fullPath: '/api/stripe-webhook'
+      preLoaderRoute: typeof ApiStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/atletas/': {
       id: '/atletas/'
       path: '/atletas'
@@ -747,6 +1091,62 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatCoachIdRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/coach-app/': {
+      id: '/coach-app/'
+      path: '/coach-app'
+      fullPath: '/coach-app/'
+      preLoaderRoute: typeof CoachAppIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/coach-app/equipos': {
+      id: '/coach-app/equipos'
+      path: '/coach-app/equipos'
+      fullPath: '/coach-app/equipos'
+      preLoaderRoute: typeof CoachAppEquiposRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/coach-app/ingresar': {
+      id: '/coach-app/ingresar'
+      path: '/coach-app/ingresar'
+      fullPath: '/coach-app/ingresar'
+      preLoaderRoute: typeof CoachAppIngresarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/coach-app/perfil': {
+      id: '/coach-app/perfil'
+      path: '/coach-app/perfil'
+      fullPath: '/coach-app/perfil'
+      preLoaderRoute: typeof CoachAppPerfilRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/coach-app/toguito': {
+      id: '/coach-app/toguito'
+      path: '/coach-app/toguito'
+      fullPath: '/coach-app/toguito'
+      preLoaderRoute: typeof CoachAppToguitoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/completar-cuota/$memberId': {
+      id: '/completar-cuota/$memberId'
+      path: '/completar-cuota/$memberId'
+      fullPath: '/completar-cuota/$memberId'
+      preLoaderRoute: typeof CompletarCuotaMemberIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/completar-pago/$purchaseId': {
+      id: '/completar-pago/$purchaseId'
+      path: '/completar-pago/$purchaseId'
+      fullPath: '/completar-pago/$purchaseId'
+      preLoaderRoute: typeof CompletarPagoPurchaseIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/institucion-invitacion/$token': {
+      id: '/institucion-invitacion/$token'
+      path: '/institucion-invitacion/$token'
+      fullPath: '/institucion-invitacion/$token'
+      preLoaderRoute: typeof InstitucionInvitacionTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mi-equipo/$teamId': {
       id: '/mi-equipo/$teamId'
       path: '/mi-equipo/$teamId'
@@ -766,6 +1166,27 @@ declare module '@tanstack/react-router' {
       path: '/sesiones/$sessionId'
       fullPath: '/sesiones/$sessionId'
       preLoaderRoute: typeof SesionesSessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/coach-app/atleta/$athleteId': {
+      id: '/coach-app/atleta/$athleteId'
+      path: '/coach-app/atleta/$athleteId'
+      fullPath: '/coach-app/atleta/$athleteId'
+      preLoaderRoute: typeof CoachAppAtletaAthleteIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/coach-app/equipo/$teamId': {
+      id: '/coach-app/equipo/$teamId'
+      path: '/coach-app/equipo/$teamId'
+      fullPath: '/coach-app/equipo/$teamId'
+      preLoaderRoute: typeof CoachAppEquipoTeamIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/coach-app/sesion/$athleteId': {
+      id: '/coach-app/sesion/$athleteId'
+      path: '/coach-app/sesion/$athleteId'
+      fullPath: '/coach-app/sesion/$athleteId'
+      preLoaderRoute: typeof CoachAppSesionAthleteIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -800,8 +1221,11 @@ const rootRouteChildren: RootRouteChildren = {
   FacturacionRoute: FacturacionRoute,
   HoyRoute: HoyRoute,
   IngresarRoute: IngresarRoute,
+  IngresarAtletaRoute: IngresarAtletaRoute,
+  IngresarSocioRoute: IngresarSocioRoute,
   InstitucionRoute: InstitucionRoute,
   LabRoute: LabRoute,
+  LegalRoute: LegalRoute,
   MarketplaceRoute: MarketplaceRoute,
   MarketplaceCoachRoute: MarketplaceCoachRoute,
   MarketplaceCoachesRoute: MarketplaceCoachesRoute,
@@ -814,18 +1238,36 @@ const rootRouteChildren: RootRouteChildren = {
   SesionAtletaRoute: SesionAtletaRoute,
   TimerRoute: TimerRoute,
   WellnessRoute: WellnessRoute,
+  AdminVideosRoute: AdminVideosRoute,
+  ApiGoogleOauthCallbackRoute: ApiGoogleOauthCallbackRoute,
+  ApiMpOauthCallbackRoute: ApiMpOauthCallbackRoute,
+  ApiMpWebhookRoute: ApiMpWebhookRoute,
+  ApiStravaCallbackRoute: ApiStravaCallbackRoute,
+  ApiStravaWebhookRoute: ApiStravaWebhookRoute,
+  ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   AtletasAthleteIdRoute: AtletasAthleteIdRoute,
+  CoachAppEquiposRoute: CoachAppEquiposRoute,
+  CoachAppIngresarRoute: CoachAppIngresarRoute,
+  CoachAppPerfilRoute: CoachAppPerfilRoute,
+  CoachAppToguitoRoute: CoachAppToguitoRoute,
+  CompletarCuotaMemberIdRoute: CompletarCuotaMemberIdRoute,
+  CompletarPagoPurchaseIdRoute: CompletarPagoPurchaseIdRoute,
+  InstitucionInvitacionTokenRoute: InstitucionInvitacionTokenRoute,
   MiEquipoTeamIdRoute: MiEquipoTeamIdRoute,
   PerfilCoachCoachIdRoute: PerfilCoachCoachIdRoute,
   SesionesSessionIdRoute: SesionesSessionIdRoute,
   AtletasIndexRoute: AtletasIndexRoute,
+  CoachAppIndexRoute: CoachAppIndexRoute,
+  CoachAppAtletaAthleteIdRoute: CoachAppAtletaAthleteIdRoute,
+  CoachAppEquipoTeamIdRoute: CoachAppEquipoTeamIdRoute,
+  CoachAppSesionAthleteIdRoute: CoachAppSesionAthleteIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
+import type { getRouter } from '../router.tsx'
+import type { startInstance } from '../start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true

@@ -13,15 +13,22 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Dumbbell,
   Home,
   PlayCircle,
   ShoppingBag,
   TrendingUp,
   User,
 } from "lucide-react";
-import { EntrenamientoScreen } from "@/components/togo/Entrenamiento";
-import { useHasCoach } from "@/components/togo/AthleteBottomNav";
 import WellnessSheet from "@/components/togo/WellnessSheet";
+import { fetchAthleteSessions } from "@/lib/athlete-sessions";
+import type { DaySession } from "@/components/togo/AthleteSessionCard";
+import { fetchAthleteCoachId, saveWellnessCheckin } from "@/lib/wellness";
+import { fetchLibraryExercises } from "@/lib/exercise-data";
+import { toast } from "sonner";
+import { useAthleteAuth } from "@/hooks/useAthleteAuth";
+import { supabase } from "@/lib/supabase";
+import { NOTIF_STYLE, type Notif } from "@/lib/notifications";
 
 type Notification = {
   icon: React.ComponentType<{ size?: number; color?: string }>;
@@ -33,44 +40,25 @@ type Notification = {
   unread: boolean;
 };
 
-const NOTIFICATIONS: Notification[] = [
-  {
-    icon: Calendar,
-    iconBg: "#F0FDF4",
-    iconColor: "#16A34A",
-    title: "Nueva sesión publicada",
-    body: "Coach Pablo publicó tu sesión del jueves. Ya podés verla.",
-    time: "Hace 10 min",
-    unread: true,
-  },
-  {
-    icon: MessageCircle,
-    iconBg: "#FFFBEB",
-    iconColor: "#D97706",
-    title: "Nuevo mensaje de Coach Pablo",
-    body: "Te mandé la sesión del jueves. Revisala cuando puedas...",
-    time: "Hace 1 hora",
-    unread: true,
-  },
-  {
-    icon: TrendingUp,
-    iconBg: "#F1F5F9",
-    iconColor: "#94A3B8",
-    title: "Nuevo récord personal",
-    body: "Superaste tu RM en Sentadilla. Ahora es 97 kg.",
-    time: "Ayer",
-    unread: false,
-  },
-  {
-    icon: CheckCircle,
-    iconBg: "#F1F5F9",
-    iconColor: "#94A3B8",
-    title: "Sesión completada",
-    body: "Completaste Fuerza del lunes. ¡Buen trabajo!",
-    time: "Lun 18/8",
-    unread: false,
-  },
-];
+const NOTIF_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
+  session: Calendar,
+  message: MessageCircle,
+  done: CheckCircle,
+  reminder: BellRing,
+};
+
+function notifToDisplay(n: Notif): Notification {
+  const style = NOTIF_STYLE[n.kind] ?? NOTIF_STYLE["reminder"]!;
+  return {
+    icon: NOTIF_ICON[n.kind] ?? BellRing,
+    iconBg: style.bg,
+    iconColor: style.fg,
+    title: n.title,
+    body: n.body,
+    time: `${n.day} · ${n.time}`,
+    unread: n.unread,
+  };
+}
 
 function NotificationsSheet({
   notifs,
@@ -189,6 +177,8 @@ function NotificationsSheet({
 }
 
 export const Route = createFileRoute("/hoy")({
+  validateSearch: (search: Record<string, unknown>): { athleteId?: string } =>
+    typeof search["athleteId"] === "string" ? { athleteId: search["athleteId"] as string } : {},
   head: () => ({
     meta: [
       { title: "Entrenamiento · TOGO" },
@@ -226,139 +216,67 @@ type Day = {
 };
 
 type Session = {
+  id?: string;
   title: string;
   minutes: number;
   coach: string;
   blocks: BlockPreview[];
+  equipment: string[];
 };
 
 const LETTERS = ["L", "M", "X", "J", "V", "S", "D"];
 
-const AMRAP_CHIP = (
-  <span className="flex items-center" style={{ gap: 6 }}>
-    <span>Finisher ·</span>
-    <span
-      style={{
-        fontSize: 10,
-        color: "#D97706",
-        backgroundColor: "#FFFBEB",
-        borderRadius: 4,
-        padding: "1px 5px",
-        fontWeight: 700,
-      }}
-    >
-      AMRAP 8 min
-    </span>
-  </span>
-);
-
-function strength(
-  title: string,
-  minutes: number,
-  blocks: BlockPreview[],
-  coach = "Coach Pablo",
-): Session {
-  return { title, minutes, coach, blocks };
+// ----- real athlete data -----
+function dateKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const FULL_BLOCKS: BlockPreview[] = [
-  { label: "A", content: "Sentadilla", right: "4 × 10" },
-  { label: "B", content: "Curl de bíceps + Martillo", right: "3 × 12–15" },
-  { label: "C", content: "Press de banca", right: "4 × 8" },
-  { label: "D", content: AMRAP_CHIP, right: null },
-];
-
-const UPPER_BLOCKS: BlockPreview[] = [
-  { label: "A", content: "Press militar", right: "4 × 8" },
-  { label: "B", content: "Remo con barra", right: "4 × 10" },
-  { label: "C", content: "Face pull", right: "3 × 15" },
-];
-
-const LOWER_BLOCKS: BlockPreview[] = [
-  { label: "A", content: "Peso muerto", right: "5 × 5" },
-  { label: "B", content: "Zancadas", right: "3 × 12" },
-  { label: "C", content: "Elevación de gemelos", right: "3 × 20" },
-];
-
-const CONDI_BLOCKS: BlockPreview[] = [
-  { label: "A", content: "Movilidad + entrada en calor", right: "10 min" },
-  { label: "B", content: AMRAP_CHIP, right: null },
-];
-
-const MOBILITY_BLOCKS: BlockPreview[] = [
-  { label: "A", content: "Movilidad y recuperación", right: "20 min" },
-];
-
-// weekOffset -> week definition. Current week: 18/8 – 24/8 (Thursday 21 = today).
-type WeekDef = {
-  startDay: number;
-  startMonth: number;
-  endDay: number;
-  endMonth: number;
-  numbers: number[];
-  todayIndex: number | null;
-  sessions: Record<number, Session[]>;
-};
-
-const WEEKS: Record<number, WeekDef> = {
-  [-1]: {
-    startDay: 11,
-    startMonth: 8,
-    endDay: 17,
-    endMonth: 8,
-    numbers: [11, 12, 13, 14, 15, 16, 17],
-    todayIndex: null,
-    sessions: {
-      0: [strength("Fuerza — Lunes", 50, LOWER_BLOCKS)],
-      1: [strength("Tren superior — Martes", 45, UPPER_BLOCKS)],
-      3: [strength("Fuerza — Jueves", 55, FULL_BLOCKS)],
-    },
-  },
-  0: {
-    startDay: 18,
-    startMonth: 8,
-    endDay: 24,
-    endMonth: 8,
-    numbers: [18, 19, 20, 21, 22, 23, 24],
-    todayIndex: 3,
-    sessions: {
-      0: [strength("Tren inferior — Lunes", 50, LOWER_BLOCKS)],
-      2: [strength("Tren superior — Miércoles", 45, UPPER_BLOCKS)],
-      3: [
-        strength("Fuerza — Jueves", 55, FULL_BLOCKS),
-        strength("Movilidad — Jueves", 20, MOBILITY_BLOCKS, "Coach Laura"),
-      ],
-      5: [strength("Acondicionamiento — Sábado", 35, CONDI_BLOCKS)],
-    },
-  },
-  1: {
-    startDay: 25,
-    startMonth: 8,
-    endDay: 31,
-    endMonth: 8,
-    numbers: [25, 26, 27, 28, 29, 30, 31],
-    todayIndex: null,
-    sessions: {
-      1: [strength("Tren superior — Martes", 45, UPPER_BLOCKS)],
-      3: [strength("Fuerza — Jueves", 55, FULL_BLOCKS)],
-      4: [strength("Acondicionamiento — Viernes", 35, CONDI_BLOCKS)],
-    },
-  },
-};
-
-function getWeek(offset: number): WeekDef {
-  return WEEKS[offset] ?? (WEEKS[0] as WeekDef);
+function startOfWeek(d: Date) {
+  const copy = new Date(d);
+  copy.setHours(0, 0, 0, 0);
+  copy.setDate(copy.getDate() - ((copy.getDay() + 6) % 7));
+  return copy;
 }
 
-function buildWeek(offset: number): Day[] {
-  const w = getWeek(offset);
-  return w.numbers.map((n, i) => ({
-    letter: LETTERS[i] ?? "",
-    number: n,
-    key: `${offset}-${i}`,
-    past: offset < 0 || (offset === 0 && w.todayIndex !== null && i < w.todayIndex),
-    session: w.sessions[i] ?? null,
+function buildRealWeek(offset: number) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const base = startOfWeek(today);
+  base.setDate(base.getDate() + offset * 7);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(base);
+    d.setDate(d.getDate() + i);
+    return { key: dateKey(d), date: d, letter: LETTERS[i] ?? "", number: d.getDate() };
+  });
+  const todayIndex = days.findIndex((d) => d.date.getTime() === today.getTime());
+  return {
+    days,
+    startDay: days[0]!.date.getDate(),
+    startMonth: days[0]!.date.getMonth() + 1,
+    endDay: days[6]!.date.getDate(),
+    endMonth: days[6]!.date.getMonth() + 1,
+    todayIndex: todayIndex === -1 ? null : todayIndex,
+  };
+}
+
+function daySessionToPreview(ds: DaySession, coachName: string, equipmentByExercise: Record<string, string>): Session {
+  const blocks: BlockPreview[] = ds.items.map((item, i) => ({
+    label: String.fromCharCode(65 + i),
+    content: item.name,
+    right: `${item.sets} × ${item.reps}`,
   }));
+  ds.circuits.forEach((c, i) => {
+    blocks.push({ label: String.fromCharCode(65 + ds.items.length + i), content: c.name || c.type, right: null });
+  });
+  const exerciseNames = [...ds.items.map((it) => it.name), ...ds.circuits.flatMap((c) => c.exercises.map((e) => e.name))];
+  const equipment = Array.from(
+    new Set(
+      exerciseNames
+        .map((name) => equipmentByExercise[name.toLowerCase()])
+        .filter((eq): eq is string => !!eq && eq !== "Peso corporal"),
+    ),
+  );
+  return { id: ds.id, title: ds.name, minutes: ds.minutes, coach: coachName, blocks, equipment };
 }
 
 function DayColumn({
@@ -540,6 +458,21 @@ function SessionPreviewCard({
         ))}
       </div>
 
+      {/* EQUIPMENT NEEDED */}
+      {session.equipment.length > 0 ? (
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #F1F5F9" }}>
+          <div className="flex items-center" style={{ gap: 6, marginBottom: 8 }}>
+            <Dumbbell size={13} color="#94A3B8" />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: 0.4 }}>Necesitás</span>
+          </div>
+          <div className="flex flex-wrap" style={{ gap: 6 }}>
+            {session.equipment.map((eq) => (
+              <span key={eq} style={{ fontSize: 12, color: "#374151", background: "#F1F5F9", borderRadius: 999, padding: "4px 10px" }}>{eq}</span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {/* START BUTTON */}
       <button
         type="button"
@@ -612,45 +545,78 @@ function BottomNav() {
   return <AthleteBottomNav active="Inicio" />;
 }
 
-function EntrenamientoPage() {
-  const navigate = useNavigate();
-  const hasCoach = useHasCoach();
-  useEffect(() => { if (!readUserContext()) navigate({ to: "/conectar" }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  return <EntrenamientoScreen hasCoach={hasCoach} />;
-}
-
 function AthleteHome() {
   const navigate = useNavigate();
-  useEffect(() => { if (!readUserContext()) navigate({ to: "/conectar" }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const { athleteId: athleteIdParam } = Route.useSearch();
+  const { athlete, loading: authLoading } = useAthleteAuth();
+  const athleteId = athleteIdParam ?? athlete?.id;
+  useEffect(() => {
+    if (authLoading) return;
+    if (!athlete && !readUserContext()) navigate({ to: "/conectar" });
+  }, [authLoading, athlete]); // eslint-disable-line react-hooks/exhaustive-deps
   const [weekOffset, setWeekOffset] = useState(0);
   const [selected, setSelected] = useState<{ offset: number; index: number }>({
     offset: 0,
-    index: getWeek(0).todayIndex ?? 0,
+    index: buildRealWeek(0).todayIndex ?? 0,
   });
   const [showWellness, setShowWellness] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
-  const [notifs, setNotifs] = useState(NOTIFICATIONS);
-  const hasUnread = notifs.some((n) => n.unread);
-  void hasUnread;
   const userCtx = useUserContext();
-  const athleteNotifs = useNotifs("athlete").list;
-  const athleteUnread = forUser(athleteNotifs, userCtx.type).some((n) => n.unread);
+  const { list: athleteNotifs, markAll: markAllNotifsRead } = useNotifs("athlete", athleteId);
+  const displayNotifs = forUser(athleteNotifs, userCtx.type).map(notifToDisplay);
+  const athleteUnread = displayNotifs.some((n) => n.unread);
+  const [pendingSessionId, setPendingSessionId] = useState<string | undefined>(undefined);
+  const [realSessions, setRealSessions] = useState<Record<string, DaySession[]>>({});
+  const [coachId, setCoachId] = useState<string | null>(null);
+  const [coachName, setCoachName] = useState("Tu coach");
+  const [equipmentByExercise, setEquipmentByExercise] = useState<Record<string, string>>({});
 
-  const week = getWeek(weekOffset);
-  const days = buildWeek(weekOffset);
-  const selectedSessions =
-    getWeek(selected.offset).sessions[selected.index] ?? null;
+  useEffect(() => {
+    if (!athleteId) return;
+    fetchAthleteSessions(athleteId).then(setRealSessions);
+    fetchAthleteCoachId(athleteId).then((cid) => {
+      setCoachId(cid);
+      if (cid) {
+        supabase.from("profiles").select("full_name").eq("id", cid).maybeSingle()
+          .then(({ data }) => setCoachName(data?.full_name ?? "Tu coach"));
+        fetchLibraryExercises(cid).then((lib) => {
+          setEquipmentByExercise(Object.fromEntries(lib.map((e) => [e.name.toLowerCase(), e.equipment])));
+        });
+      }
+    });
+  }, [athleteId]);
+
+  const realWeek = buildRealWeek(weekOffset);
+  const week = realWeek;
+  const days: Day[] = realWeek.days.map((d, i) => {
+    const sessions = (realSessions[d.key] ?? []).filter((s) => s.status !== "draft");
+    return {
+      letter: d.letter,
+      number: d.number,
+      key: d.key,
+      past: realWeek.todayIndex !== null ? i < realWeek.todayIndex : weekOffset < 0,
+      session: sessions.length ? sessions.map((s) => daySessionToPreview(s, coachName, equipmentByExercise)) : null,
+    };
+  });
+
+  const selectedSessions = (() => {
+    const w = buildRealWeek(selected.offset);
+    const key = w.days[selected.index]?.key;
+    const sessions = key ? (realSessions[key] ?? []).filter((s) => s.status !== "draft") : [];
+    return sessions.length ? sessions.map((s) => daySessionToPreview(s, coachName, equipmentByExercise)) : null;
+  })();
 
   const range = `${week.startDay}/${week.startMonth} – ${week.endDay}/${week.endMonth}`;
 
   const goWeek = (delta: number) => {
-    const next = weekOffset + delta;
-    if (!WEEKS[next]) return;
-    setWeekOffset(next);
+    setWeekOffset(weekOffset + delta);
   };
 
-  const startWellness = () => setShowWellness(true);
+  const startWellness = (sessionId?: string) => {
+    setPendingSessionId(sessionId);
+    setShowWellness(true);
+  };
 
   return (
     <div
@@ -722,7 +688,7 @@ function AthleteHome() {
               <button
                 type="button"
                 aria-label="Notificaciones"
-                onClick={() => navigate({ to: "/notificaciones" })}
+                onClick={() => navigate({ to: "/notificaciones", search: athleteId ? { athleteId } : {} })}
                 style={{ position: "relative" }}
               >
                 <BellRing size={20} color="#94A3B8" />
@@ -785,9 +751,9 @@ function AthleteHome() {
             >
               {selectedSessions.map((session) => (
                 <SessionPreviewCard
-                  key={session.title}
+                  key={session.id ?? session.title}
                   session={session}
-                  onStart={startWellness}
+                  onStart={() => startWellness(session.id)}
                 />
               ))}
             </div>
@@ -804,19 +770,24 @@ function AthleteHome() {
         <WellnessSheet
           show={showWellness}
           onClose={() => setShowWellness(false)}
-          onStart={() => {
+          onStart={(answers) => {
             setShowWellness(false);
-            navigate({ to: "/sesion-atleta" });
+            if (athleteId && coachId && Object.keys(answers).length > 0) {
+              saveWellnessCheckin(coachId, athleteId, pendingSessionId ?? null, {
+                energy: answers["energia"],
+                sleep: answers["sueno"],
+                body: answers["cuerpo"],
+              }).catch(() => toast.error("No se pudo guardar el check-in"));
+            }
+            navigate({ to: "/sesion-atleta", search: pendingSessionId ? { sessionId: pendingSessionId } : {} });
           }}
         />
 
         {/* NOTIFICATIONS SHEET */}
         {showNotifs && (
           <NotificationsSheet
-            notifs={notifs}
-            onMarkAllRead={() =>
-              setNotifs((prev) => prev.map((n) => ({ ...n, unread: false })))
-            }
+            notifs={displayNotifs}
+            onMarkAllRead={markAllNotifsRead}
             onClose={() => setShowNotifs(false)}
           />
         )}

@@ -1,5 +1,6 @@
 import { NewCoachGate } from "@/components/togo/EmptyStates";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   Plus,
@@ -22,6 +23,16 @@ import { Sidebar } from "@/components/togo/Sidebar";
 import { LabCanvas, type LabCanvasHandle } from "@/components/togo/LabCanvas";
 import { LabBlocks, type LabBlocksHandle } from "@/components/togo/LabBlocks";
 import { LabSessions } from "@/components/togo/LabSessions";
+import {
+  getCoachId,
+  fetchPrograms,
+  createProgram,
+  archiveProgram,
+  assignProgramToAthletes,
+  fetchAthletesForAssign,
+  type ProgramWithCounts,
+  type AthleteOption,
+} from "@/lib/programs";
 
 
 
@@ -47,86 +58,6 @@ export const Route = createFileRoute("/lab")({
 });
 
 type ProgramStatus = "En progreso" | "Listo para publicar" | "Archivado";
-
-type Program = {
-  id: string;
-  name: string;
-  description: string;
-  weeks: number;
-  sessions: number;
-  athletes: number;
-  status: ProgramStatus;
-  progress?: number;
-};
-
-const PROGRAMS: Program[] = [
-  {
-    id: "p1",
-    name: "Fuerza base 12 semanas",
-    description: "Programa de hipertrofia progresiva para intermedios.",
-    weeks: 12,
-    sessions: 36,
-    athletes: 8,
-    status: "En progreso",
-    progress: 65,
-  },
-  {
-    id: "p2",
-    name: "Cardio y movilidad — 6 semanas",
-    description: "Mejorá tu resistencia y amplitud de movimiento.",
-    weeks: 6,
-    sessions: 18,
-    athletes: 3,
-    status: "Listo para publicar",
-  },
-  {
-    id: "p3",
-    name: "Pérdida de grasa — verano",
-    description: "Alta densidad de trabajo, déficit calórico.",
-    weeks: 8,
-    sessions: 24,
-    athletes: 0,
-    status: "En progreso",
-    progress: 30,
-  },
-  {
-    id: "p4",
-    name: "Iniciación al peso libre",
-    description: "Para alumnos sin experiencia con barras y mancuernas.",
-    weeks: 4,
-    sessions: 12,
-    athletes: 0,
-    status: "Archivado",
-  },
-  {
-    id: "p5",
-    name: "Potencia y explosividad",
-    description: "Trabajo pliométrico y de velocidad.",
-    weeks: 6,
-    sessions: 18,
-    athletes: 2,
-    status: "En progreso",
-    progress: 80,
-  },
-  {
-    id: "p6",
-    name: "Movilidad para deportistas",
-    description: "Rutinas de movilidad activa y pasiva.",
-    weeks: 4,
-    sessions: 8,
-    athletes: 5,
-    status: "Listo para publicar",
-  },
-];
-
-const ATHLETES = [
-  { id: "a1", name: "Lucía Fernández", initials: "LF", active: null },
-  { id: "a2", name: "Martín Gómez", initials: "MG", active: "Fuerza base 12 semanas" },
-  { id: "a3", name: "Camila Suárez", initials: "CS", active: null },
-  { id: "a4", name: "Julián Ríos", initials: "JR", active: "Potencia y explosividad" },
-  { id: "a5", name: "Sofía Molina", initials: "SM", active: null },
-  { id: "a6", name: "Nicolás Paz", initials: "NP", active: "Movilidad para deportistas" },
-];
 
 const statusChipStyle: Record<ProgramStatus, { backgroundColor: string; color: string }> = {
   "En progreso": { backgroundColor: "#FEF9C3", color: "#854D0E" },
@@ -238,12 +169,30 @@ function LabPage() {
   const [sessionFilter, setSessionFilter] = useState("Todos");
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [assignProgram, setAssignProgram] = useState<Program | null>(null);
+  const [assignProgram, setAssignProgram] = useState<ProgramWithCounts | null>(null);
   const [newProgramOpen, setNewProgramOpen] = useState(false);
+
+  const [coachId, setCoachId] = useState<string | null>(null);
+  const [programs, setPrograms] = useState<ProgramWithCounts[]>([]);
+  const [athletes, setAthletes] = useState<AthleteOption[]>([]);
+
+  const reloadPrograms = (cid: string) => fetchPrograms(cid).then(setPrograms);
+
+  useEffect(() => {
+    getCoachId().then((cid) => {
+      if (!cid) return;
+      setCoachId(cid);
+      fetchAthletesForAssign(cid).then(setAthletes);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (coachId) reloadPrograms(coachId);
+  }, [coachId, tab]);
 
   const filteredPrograms = useMemo(() => {
     const q = programQuery.trim().toLowerCase();
-    return PROGRAMS.filter((p) => {
+    return programs.filter((p) => {
       const matchQ = !q || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q);
       const matchF =
         programFilter === "Todos" ||
@@ -252,7 +201,7 @@ function LabPage() {
         (programFilter === "Archivados" && p.status === "Archivado");
       return matchQ && matchF;
     });
-  }, [programQuery, programFilter]);
+  }, [programs, programQuery, programFilter]);
 
 
   const newOptions: { label: string; icon: typeof Plus; onClick: () => void }[] =
@@ -288,7 +237,7 @@ function LabPage() {
             Lab
           </h1>
 
-          <div className="relative">
+          <div className="relative" id="lab-new-menu">
             <button
               type="button"
               onClick={() => setNewOpen((v) => !v)}
@@ -365,13 +314,17 @@ function LabPage() {
           {tab === "Lienzo" ? (
             <LabCanvas
               ref={canvasRef}
-              programs={PROGRAMS.map((p) => p.name)}
-              athletes={ATHLETES.map((a) => ({ id: a.id, name: a.name }))}
-              onEditDetail={() => navigate({ to: "/sesiones/$sessionId", params: { sessionId: "s1" } })}
+              coachId={coachId}
+              programs={programs.map((p) => p.name)}
+              athletes={athletes.map((a) => ({ id: a.id, name: a.name }))}
+              onEditDetail={(programId, key) => {
+                const [week, day] = key.split("-");
+                navigate({ to: "/sesiones/$sessionId", params: { sessionId: "canvas" }, search: { programId, week, day } });
+              }}
             />
           ) : null}
 
-          {tab === "Bloques" ? <LabBlocks ref={blocksRef} /> : null}
+          {tab === "Bloques" ? <LabBlocks ref={blocksRef} coachId={coachId} /> : null}
 
           {tab === "Programas" ? (
             <>
@@ -397,6 +350,11 @@ function LabPage() {
                     onCloseMenu={() => setOpenMenu(null)}
                     onEdit={() => navigate({ to: "/marketplace-coach" })}
                     onAssign={() => setAssignProgram(p)}
+                    onArchive={() => {
+                      archiveProgram(p.id)
+                        .then(() => { if (coachId) reloadPrograms(coachId); })
+                        .catch(() => toast.error("No se pudo archivar el programa"));
+                    }}
                   />
                 ))}
                 <PlaceholderCard label="Nuevo programa" onClick={() => setNewProgramOpen(true)} />
@@ -416,6 +374,7 @@ function LabPage() {
               </div>
 
               <LabSessions
+                coachId={coachId}
                 query={sessionQuery}
                 filter={sessionFilter}
                 onEditDetail={(id) => navigate({ to: "/sesiones/$sessionId", params: { sessionId: id } })}
@@ -427,15 +386,34 @@ function LabPage() {
       </main>
 
       {assignProgram ? (
-        <AssignModal program={assignProgram} onClose={() => setAssignProgram(null)} />
+        <AssignModal
+          program={assignProgram}
+          athletes={athletes}
+          onClose={() => setAssignProgram(null)}
+          onConfirm={(athleteIds, startDate) => {
+            if (!coachId) return;
+            assignProgramToAthletes(coachId, assignProgram.id, athleteIds, startDate)
+              .then(() => {
+                setAssignProgram(null);
+                reloadPrograms(coachId);
+                toast.success("Programa asignado ✓");
+              })
+              .catch(() => toast.error("No se pudo asignar el programa"));
+          }}
+        />
       ) : null}
 
       {newProgramOpen ? (
         <NewProgramModal
           onClose={() => setNewProgramOpen(false)}
-          onCreate={() => {
-            setNewProgramOpen(false);
-            navigate({ to: "/marketplace-coach" });
+          onCreate={(input) => {
+            if (!coachId) return;
+            createProgram(coachId, input)
+              .then(() => {
+                setNewProgramOpen(false);
+                reloadPrograms(coachId);
+              })
+              .catch(() => toast.error("No se pudo crear el programa"));
           }}
         />
       ) : null}
@@ -443,7 +421,13 @@ function LabPage() {
   );
 }
 
-function NewProgramModal({ onClose, onCreate }: { onClose: () => void; onCreate: () => void }) {
+function NewProgramModal({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (input: { name: string; description: string; weeks: number }) => void;
+}) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [weeks, setWeeks] = useState("8");
@@ -510,7 +494,7 @@ function NewProgramModal({ onClose, onCreate }: { onClose: () => void; onCreate:
         <button
           type="button"
           disabled={!name.trim()}
-          onClick={onCreate}
+          onClick={() => onCreate({ name: name.trim(), description: description.trim(), weeks: Math.max(1, Number(weeks) || 1) })}
           className="w-full rounded-[10px] text-[13px] font-semibold disabled:opacity-40"
           style={{ height: 42, backgroundColor: "#111827", color: "#FFFFFF" }}
         >
@@ -529,13 +513,15 @@ function ProgramCard({
   onCloseMenu,
   onEdit,
   onAssign,
+  onArchive,
 }: {
-  program: Program;
+  program: ProgramWithCounts;
   menuOpen: boolean;
   onToggleMenu: () => void;
   onCloseMenu: () => void;
   onEdit: () => void;
   onAssign: () => void;
+  onArchive: () => void;
 }) {
   const [hover, setHover] = useState(false);
   const chip = statusChipStyle[program.status];
@@ -585,6 +571,7 @@ function ProgramCard({
                       onCloseMenu();
                       if (label === "Editar") onEdit();
                       if (label === "Asignar a atleta") onAssign();
+                      if (label === "Archivar") onArchive();
                     }}
                     className="flex w-full flex-row items-center gap-2 whitespace-nowrap rounded-[6px] text-left text-[12px] hover:bg-[#F8FAFC]"
                     style={{ padding: "8px 12px", color: "#374151" }}
@@ -623,28 +610,6 @@ function ProgramCard({
         <Meta icon={Users} text={`${program.athletes} atletas asignados`} />
       </div>
 
-      {program.status === "En progreso" && program.progress != null ? (
-        <div style={{ marginBottom: 14 }}>
-          <div className="flex flex-row items-center justify-between" style={{ marginBottom: 5 }}>
-            <span className="text-[11px]" style={{ color: "#94A3B8" }}>
-              Completado
-            </span>
-            <span className="text-[11px] font-semibold" style={{ color: "#111827" }}>
-              {program.progress}%
-            </span>
-          </div>
-          <div style={{ height: 4, borderRadius: 2, backgroundColor: "#F1F5F9" }}>
-            <div
-              style={{
-                height: 4,
-                borderRadius: 2,
-                backgroundColor: "#111827",
-                width: `${program.progress}%`,
-              }}
-            />
-          </div>
-        </div>
-      ) : null}
 
       <div
         className="flex flex-row gap-2"
@@ -702,12 +667,22 @@ function Meta({
   );
 }
 
-function AssignModal({ program, onClose }: { program: Program; onClose: () => void }) {
+function AssignModal({
+  program,
+  athletes,
+  onClose,
+  onConfirm,
+}: {
+  program: ProgramWithCounts;
+  athletes: AthleteOption[];
+  onClose: () => void;
+  onConfirm: (athleteIds: string[], startDate: string) => void;
+}) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [startDate, setStartDate] = useState("");
 
-  const list = ATHLETES.filter((a) => a.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const list = athletes.filter((a) => a.name.toLowerCase().includes(query.trim().toLowerCase()));
 
   return (
     <div
@@ -819,8 +794,8 @@ function AssignModal({ program, onClose }: { program: Program; onClose: () => vo
           </button>
           <button
             type="button"
-            disabled={selected.length === 0}
-            onClick={onClose}
+            disabled={selected.length === 0 || !startDate}
+            onClick={() => onConfirm(selected, startDate)}
             className="flex-1 rounded-[10px] text-[13px] font-medium disabled:opacity-40"
             style={{ height: 40, backgroundColor: "#111827", color: "#FFFFFF" }}
           >

@@ -1,8 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Check, CloudRain, Frown, Meh, Smile, Flame, Home, type LucideIcon } from "lucide-react";
+import { fetchCompletionSummary, setSessionFeeling } from "@/lib/session-execution";
 
 export const Route = createFileRoute("/celebracion")({
+  validateSearch: (search: Record<string, unknown>): { sessionId?: string } =>
+    typeof search["sessionId"] === "string" ? { sessionId: search["sessionId"] as string } : {},
   head: () => ({
     meta: [
       { title: "¡Sesión completada! · TOGO" },
@@ -31,11 +35,6 @@ const FEEL_OPTIONS: { icon: LucideIcon; label: string }[] = [
   { icon: Flame, label: "Excelente" },
 ];
 
-const STATS = [
-  { number: "54:12", label: "Duración" },
-  { number: "4", label: "Bloques" },
-  { number: "18", label: "Series" },
-];
 
 const QUOTES = [
   "Un paso más cerca del objetivo.",
@@ -73,7 +72,24 @@ const QUOTES = [
 
 function CelebrationScreen() {
   const navigate = useNavigate();
+  const { sessionId } = Route.useSearch();
   const [feel, setFeel] = useState<number | null>(null);
+  const [summary, setSummary] = useState<{ name: string; blocks: number; sets: number } | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    fetchCompletionSummary(sessionId).then(setSummary);
+  }, [sessionId]);
+
+  const stats = [
+    { number: summary ? String(summary.blocks) : "—", label: "Bloques" },
+    { number: summary ? String(summary.sets) : "—", label: "Series" },
+  ];
+
+  const pickFeel = (i: number) => {
+    setFeel(i);
+    if (sessionId) setSessionFeeling(sessionId, i).catch(() => toast.error("No se pudo guardar cómo te sentiste"));
+  };
 
   return (
     <>
@@ -143,7 +159,7 @@ function CelebrationScreen() {
                   textAlign: "center",
                 }}
               >
-                Fuerza · Jueves 22/8
+                {summary?.name ?? "Sesión"}
               </p>
             </div>
 
@@ -152,7 +168,7 @@ function CelebrationScreen() {
               className="flex"
               style={{ margin: "28px 20px 0", gap: 10 }}
             >
-              {STATS.map((st) => (
+              {stats.map((st) => (
                 <div
                   key={st.label}
                   className="flex flex-col items-center justify-center"
@@ -213,7 +229,7 @@ function CelebrationScreen() {
                     <button
                       key={i}
                       type="button"
-                      onClick={() => setFeel(i)}
+                      onClick={() => pickFeel(i)}
                       className="flex flex-1 flex-col items-center justify-center"
                       style={{
                         height: 52,

@@ -1,3 +1,4 @@
+import React from "react";
 import { toast } from "sonner";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -12,6 +13,7 @@ import {
   Plus,
   Search,
   Smile,
+  X,
   Zap,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -20,7 +22,7 @@ import { Sidebar } from "@/components/togo/Sidebar";
 import { CalendarTopBar, denseCell } from "@/components/togo/DenseSession";
 import { SelectionToolbar, Selectable, dayDiff, mapOps, selId, useDragSelect } from "@/components/togo/CalendarSelection";
 import { AthleteProgress } from "@/components/togo/AthleteProgress";
-import { LAB_SESSIONS } from "@/components/togo/LabSessions";
+import type { LabSession } from "@/components/togo/LabSessions";
 import {
   AerobicEditor,
   SessionCard,
@@ -28,7 +30,20 @@ import {
   newEx,
   type DaySession,
 } from "@/components/togo/AthleteSessionCard";
-import { ATHLETES, type Athlete, type Load } from "@/routes/atletas.index";
+import type { Athlete } from "@/routes/atletas.index";
+import { supabase } from "@/lib/supabase";
+import {
+  fetchAthleteSessions,
+  insertAthleteSession,
+  updateAthleteSession,
+  patchAthleteSessionStatus,
+  deleteAthleteSession,
+} from "@/lib/athlete-sessions";
+import { fetchSessionTemplates } from "@/lib/session-templates";
+import { fetchRecentWellness, type WellnessCheckin } from "@/lib/wellness";
+import { fetchAthleteNotes, createAthleteNote, deleteAthleteNote, type AthleteNote } from "@/lib/athlete-notes";
+import { QUESTIONS } from "@/components/togo/WellnessSheet";
+import { notifySessionsPublished } from "@/lib/notifications";
 
 export const Route = createFileRoute("/atletas/$athleteId")({
   head: () => ({
@@ -68,7 +83,15 @@ const MONTH_NAMES = [
   "Diciembre",
 ];
 
-const LOAD_DOT: Record<Load, { color: string; label: string }> = {
+type LoadStatus = "ok" | "warn" | "risk" | "none" | "inactive";
+
+const LEVEL_LABEL: Record<string, string> = {
+  principiante: "Principiante",
+  intermedio: "Intermedio",
+  avanzado: "Avanzado",
+};
+
+const LOAD_DOT: Record<LoadStatus, { color: string; label: string }> = {
   ok: { color: "#22C55E", label: "Carga OK" },
   warn: { color: "#F59E0B", label: "En alerta" },
   risk: { color: "#EF4444", label: "Sobrecargado" },
@@ -85,106 +108,58 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function dayKey(day: number) {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(day);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const WELLNESS_DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+function buildWellnessRows(checkins: WellnessCheckin[]) {
+  const byDate = new Map(checkins.map((c) => [c.date, c]));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (6 - i));
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const c = byDate.get(key);
+    const low = (v: number | null | undefined) => v != null && v <= 1;
+    const state = !c ? "none" : low(c.energy) || low(c.sleep) || low(c.body) ? "warn" : "ok";
+    return {
+      day: `${WELLNESS_DAY_LABELS[d.getDay()]} ${d.getDate()}`,
+      energy: c?.energy ?? null,
+      sleep: c?.sleep ?? null,
+      body: c?.body ?? null,
+      state,
+    };
+  });
 }
-
-const mk = (id: string, name: string, status: DaySession["status"], minutes: number, ex: [string, string, string][]): DaySession => ({
-  id,
-  name,
-  status,
-  minutes,
-  items: ex.map(([n, se, r], i) => ({ ...newEx(n, se, r), id: `${id}-e${i}` })),
-  circuits: [],
-});
-
-const INITIAL_SESSIONS: Record<string, DaySession[]> = {
-  [dayKey(2)]: [mk("a1", "Fuerza — Lunes", "done", 60, [["Sentadilla trasera", "4", "6"], ["Press banca", "4", "8"], ["Remo con barra", "3", "10"]])],
-  [dayKey(4)]: [mk("a2", "Hipertrofia — Miércoles", "done", 55, [["Press inclinado", "3", "10"], ["Aperturas", "3", "12"]])],
-  [dayKey(9)]: [mk("a3", "Fuerza — Empuje", "published", 50, [["Press militar", "4", "8"], ["Fondos", "3", "10"]])],
-  [dayKey(11)]: [
-    mk("a4", "Full body A", "draft", 55, [["Sentadilla trasera", "4", "8"], ["Press militar", "3", "10"], ["Face pull", "3", "15"]]),
-    mk("a5", "Movilidad de cadera", "draft", 30, [["Hip 90/90", "3", "60s"], ["Pigeon pose", "3", "45s"]]),
-    mk("a6", "Core y abdominales", "draft", 25, [["Plancha", "3", "45s"], ["Dead bug", "3", "12"]]),
-  ],
-  [dayKey(16)]: [mk("a7", "HIIT cardio 20 min", "draft", 20, [["Burpees", "3", "15"], ["Mountain climbers", "3", "30"]])],
-};
-
-const VOLUME = [4200, 4600, 5100, 4900, 5600, 6100, 5800, 6400];
-const ONE_RM = [95, 98, 100, 102, 105, 107, 110, 112];
-
-const PRS = [
-  { ex: "Sentadilla trasera", value: "132,5 kg", when: "12 sep" },
-  { ex: "Press de banca", value: "95 kg", when: "5 sep" },
-  { ex: "Peso muerto", value: "165 kg", when: "29 ago" },
-];
-
-const WELLNESS_DAYS = [
-  { day: "Lun 15", energy: 8, sleep: 7, mood: 8, state: "ok" },
-  { day: "Mar 16", energy: 7, sleep: 6, mood: 7, state: "ok" },
-  { day: "Mié 17", energy: 6, sleep: 5, mood: 6, state: "warn" },
-  { day: "Jue 18", energy: 5, sleep: 5, mood: 6, state: "warn" },
-  { day: "Vie 19", energy: 7, sleep: 7, mood: 8, state: "ok" },
-  { day: "Sáb 20", energy: null, sleep: null, mood: null, state: "none" },
-  { day: "Dom 21", energy: 8, sleep: 8, mood: 8, state: "ok" },
-];
-
-const PREV_NOTES = [
-  { when: "12 sep", text: "Mostró buena técnica en sentadilla, aumentar peso la próxima semana." },
-  { when: "3 sep", text: "Molestia leve en hombro derecho: bajamos volumen de empuje vertical." },
-];
 
 const TABS = ["Calendario", "Progreso", "Bienestar", "Notas"] as const;
 type Tab = (typeof TABS)[number];
-
-function Chart({ data, color, label }: { data: number[]; color: string; label: string }) {
-  const w = 300;
-  const h = 110;
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const pts = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * (w - 20) + 10;
-    const y = h - 16 - ((v - min) / Math.max(1, max - min)) * (h - 36);
-    return `${x},${y}`;
-  });
-  return (
-    <div
-      style={{
-        flex: 1,
-        backgroundColor: "#FFFFFF",
-        border: "1px solid #E2E8F0",
-        borderRadius: 12,
-        padding: 16,
-      }}
-    >
-      <p style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 10 }}>{label}</p>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: 110 }} role="img" aria-label={label}>
-        {[0, 1, 2, 3].map((i) => (
-          <line key={i} x1={10} x2={w - 10} y1={12 + i * 24} y2={12 + i * 24} stroke="#F1F5F9" strokeWidth={1} />
-        ))}
-        <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth={2} />
-        {pts.map((p) => {
-          const [x, y] = p.split(",");
-          return <circle key={p} cx={x} cy={y} r={2.5} fill={color} />;
-        })}
-      </svg>
-    </div>
-  );
-}
 
 function AthleteCalendar() {
   const { athleteId } = Route.useParams();
   const navigate = useNavigate();
 
-  const athlete: Athlete =
-    ATHLETES.find((a) => a.id === athleteId) ?? (ATHLETES[0] as Athlete);
+  const [athlete, setAthlete] = React.useState<Athlete | null>(null);
+  const [loadingAthlete, setLoadingAthlete] = React.useState(true);
+  React.useEffect(() => {
+    supabase.from("athletes").select("*").eq("id", athleteId).single()
+      .then(({ data }) => { setAthlete(data); setLoadingAthlete(false); });
+  }, [athleteId]);
 
   const [tab, setTab] = useState<Tab>("Calendario");
   const [monthOffset, setMonthOffset] = useState(0);
-  const [sessions, setSessions] = useState<Record<string, DaySession[]>>(INITIAL_SESSIONS);
+  const [sessions, setSessions] = useState<Record<string, DaySession[]>>({});
+  React.useEffect(() => {
+    fetchAthleteSessions(athleteId).then(setSessions);
+  }, [athleteId]);
+  const [labSessions, setLabSessions] = useState<LabSession[]>([]);
+  React.useEffect(() => {
+    if (!athlete) return;
+    fetchSessionTemplates(athlete.coach_id).then(setLabSessions);
+  }, [athlete]);
+  const [wellness, setWellness] = useState<WellnessCheckin[]>([]);
+  React.useEffect(() => {
+    fetchRecentWellness(athleteId).then(setWellness);
+  }, [athleteId]);
   const [picker, setPicker] = useState<string | null>(null);
   const [typePicker, setTypePicker] = useState<string | null>(null);
   const [fieldFor, setFieldFor] = useState<Date | null>(null);
@@ -198,6 +173,11 @@ function AthleteCalendar() {
   const [menu, setMenu] = useState(false);
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
+  const [athleteNotes, setAthleteNotes] = useState<AthleteNote[]>([]);
+  const [savingNote, setSavingNote] = useState(false);
+  React.useEffect(() => {
+    fetchAthleteNotes(athleteId).then(setAthleteNotes);
+  }, [athleteId]);
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef<number | null>(null);
@@ -223,6 +203,9 @@ function AthleteCalendar() {
       return d;
     });
   }, [viewMonth]);
+
+  if (loadingAthlete) return <div style={{ padding: 40 }}>Cargando...</div>;
+  if (!athlete) return <div style={{ padding: 40 }}>Atleta no encontrado.</div>;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -263,75 +246,97 @@ function AthleteCalendar() {
     else if (dx > 60) goMonth(-1);
   };
 
+  const reportError = (msg: string) => toast.error(msg);
+
   const pushSession = (key: string, sess: DaySession) => {
     setSessions((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), sess] }));
     setPicker(null);
     setQ("");
+    insertAthleteSession(athlete.coach_id, athlete.id, key, sess).catch(() => reportError("No se pudo guardar la sesión"));
   };
   const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const cloneSession = (s: DaySession, status: DaySession["status"] = "draft"): DaySession => ({
     ...s,
-    id: `c${uid()}`,
+    id: crypto.randomUUID(),
     status,
     items: s.items.map((e) => ({ ...e, id: `${e.id}-${uid()}` })),
     circuits: s.circuits.map((c) => ({ ...c, exercises: c.exercises.map((e) => ({ ...e })) })),
   });
   const addBlank = (key: string) =>
-    pushSession(key, { id: `n${uid()}`, name: "Nueva sesión de fuerza", status: "draft", minutes: 45, items: [], circuits: [] });
+    pushSession(key, { id: crypto.randomUUID(), name: "Nueva sesión de fuerza", status: "draft", minutes: 45, items: [], circuits: [] });
   const addFromLab = (key: string, labId: string) => {
-    const l = LAB_SESSIONS.find((x) => x.id === labId);
+    const l = labSessions.find((x) => x.id === labId);
     if (!l) return;
     pushSession(key, {
-      id: `l${uid()}`,
+      id: crypto.randomUUID(),
       name: l.name,
       status: "draft",
       minutes: l.minutes,
-      items: l.exercises.map((e) => ({ ...newEx(e.name, e.sets, e.reps), weight: e.weight })),
+      items: l.exercises.map((e) => ({ ...newEx(e.name, e.sets, e.reps), weight: e.weight, chain: e.group === "B" })),
       circuits: l.circuits.map((c) => ({ ...c })),
     });
   };
-  const updateSession = (key: string, ns: DaySession) =>
+  const updateSession = (key: string, ns: DaySession) => {
     setSessions((prev) => ({ ...prev, [key]: (prev[key] ?? []).map((s) => (s.id === ns.id ? ns : s)) }));
+    updateAthleteSession(ns).catch(() => reportError("No se pudieron guardar los cambios"));
+  };
   const ops = mapOps(setSessions, (s: DaySession) => cloneSession(s));
   const pasteSession = (key: string) => {
     if (!copied.length) return;
     const first = copied.reduce((m, c) => (dayDiff(c.key, m) < 0 ? c.key : m), copied[0]!.key);
-    ops.place(copied, dayDiff(key, first));
+    const created = ops.place(copied, dayDiff(key, first));
     setCopied([]);
+    created.forEach(({ key: k, s }) =>
+      insertAthleteSession(athlete.coach_id, athlete.id, k, s).catch(() => reportError("No se pudo pegar una sesión")),
+    );
   };
   const selItems = ops.collect(sessions, sel.selected);
   const repeatSession = (from: Date, s: DaySession, every: number, times: number) => {
+    const created: { key: string; s: DaySession }[] = [];
     setSessions((prev) => {
       const next = { ...prev };
       for (let i = 1; i <= times; i++) {
         const d = new Date(from);
         d.setDate(d.getDate() + 7 * every * i);
         const k = cellKey(d);
-        next[k] = [...(next[k] ?? []), cloneSession(s)];
+        const clone = cloneSession(s);
+        created.push({ key: k, s: clone });
+        next[k] = [...(next[k] ?? []), clone];
       }
       return next;
     });
+    created.forEach(({ key, s: cs }) =>
+      insertAthleteSession(athlete.coach_id, athlete.id, key, cs).catch(() => reportError("No se pudo guardar una repetición")),
+    );
   };
 
   const removeSession = (key: string, id: string) => {
     setSessions((prev) => ({ ...prev, [key]: (prev[key] ?? []).filter((s) => s.id !== id) }));
+    deleteAthleteSession(id).catch(() => reportError("No se pudo eliminar la sesión"));
   };
 
   const publishMonth = () => {
+    const changedIds: string[] = [];
     setSessions((prev) => {
       const next = { ...prev };
       monthCells.forEach((d) => {
         const key = cellKey(d);
         if (next[key]) {
-          next[key] = next[key]!.map((s) => (s.status === "draft" ? { ...s, status: "published" as const } : s));
+          next[key] = next[key]!.map((s) => {
+            if (s.status !== "draft") return s;
+            changedIds.push(s.id);
+            return { ...s, status: "published" as const };
+          });
         }
       });
       return next;
     });
     setConfirmPublish(false);
+    changedIds.forEach((id) => patchAthleteSessionStatus(id, "published").catch(() => reportError("No se pudo publicar una sesión")));
+    if (changedIds.length) notifySessionsPublished(athlete.coach_id, athlete.id, changedIds.length);
   };
 
-  const dot = LOAD_DOT[athlete.load];
+  const dot = LOAD_DOT.none;
   const borderLeft = (s: DaySession) =>
     s.status === "done" ? "#111827" : s.status === "published" ? "#22C55E" : "#E2E8F0";
 
@@ -371,7 +376,7 @@ function AthleteCalendar() {
               Mis atletas
             </Link>
             <ChevronRight size={12} color="#CBD5E1" />
-            <span style={{ fontSize: 12, color: "#374151" }}>{athlete.name}</span>
+            <span style={{ fontSize: 12, color: "#374151" }}>{athlete.full_name}</span>
           </div>
 
           <div
@@ -391,33 +396,25 @@ function AthleteCalendar() {
                 flexShrink: 0,
               }}
             >
-              {initials(athlete.name)}
+              {initials(athlete.full_name)}
             </div>
 
             <div className="flex flex-1 flex-col" style={{ gap: 4 }}>
               <div className="flex items-center" style={{ gap: 10 }}>
-                <h1 style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>{athlete.name}</h1>
+                <h1 style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>{athlete.full_name}</h1>
                 <span
                   title={dot.label}
                   style={{ width: 10, height: 10, borderRadius: 999, backgroundColor: dot.color }}
                 />
               </div>
               <p style={{ fontSize: 13, color: "#94A3B8" }}>
-                {athlete.program
-                  ? `${athlete.program}${athlete.week ? ` · ${athlete.week}` : ""}`
-                  : "Sin programa asignado"}
+                {athlete.level ? LEVEL_LABEL[athlete.level] ?? athlete.level : "Sin nivel asignado"}
               </p>
               <div className="flex items-center" style={{ gap: 12, marginTop: 2 }}>
-                {[
-                  { Icon: Zap, value: athlete.energy },
-                  { Icon: Moon, value: athlete.sleep },
-                  { Icon: Smile, value: athlete.mood },
-                ].map(({ Icon, value }, i) => (
+                {[Zap, Moon, Smile].map((Icon, i) => (
                   <span key={i} className="flex items-center" style={{ gap: 4 }}>
                     <Icon size={11} color="#CBD5E1" />
-                    <span style={{ fontSize: 11, color: "#374151" }}>
-                      {value === null ? "—" : `${value}/10`}
-                    </span>
+                    <span style={{ fontSize: 11, color: "#374151" }}>—</span>
                   </span>
                 ))}
                 <span style={{ fontSize: 11, color: "#CBD5E1" }}>· Hoy</span>
@@ -427,7 +424,7 @@ function AthleteCalendar() {
             <div className="flex items-center self-start" style={{ gap: 8 }}>
               <button
                 type="button"
-                onClick={() => navigate({ to: "/mensajes", search: { atleta: athlete.name } })}
+                onClick={() => navigate({ to: "/mensajes", search: { athleteId: athlete.id } })}
                 className="flex cursor-pointer items-center transition-colors hover:bg-[#F8FAFC]"
                 style={{
                   border: "1px solid #E2E8F0",
@@ -541,7 +538,7 @@ function AthleteCalendar() {
               </button>
               <span style={{ fontSize: 16, fontWeight: 700, color: "#FFFFFF", flex: 1 }}>{monthLabel}</span>
               <div className="flex items-center" style={{ gap: 8 }}>
-                <button type="button" onClick={() => navigate({ to: "/mensajes", search: { atleta: athlete.name } })} className="flex items-center" style={{ gap: 6, border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, height: 34, padding: "0 14px", fontSize: 12, color: "#FFFFFF", background: "none", cursor: "pointer" }}>
+                <button type="button" onClick={() => navigate({ to: "/mensajes", search: { athleteId: athlete.id } })} className="flex items-center" style={{ gap: 6, border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, height: 34, padding: "0 14px", fontSize: 12, color: "#FFFFFF", background: "none", cursor: "pointer" }}>
                   <MessageCircle size={13} color="#FFFFFF" />Mensaje atleta
                 </button>
                 <button type="button" onClick={() => setConfirmPublish(true)} style={{ backgroundColor: "#FFFFFF", color: "#111827", borderRadius: 8, height: 34, padding: "0 14px", fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer" }}>
@@ -620,7 +617,7 @@ function AthleteCalendar() {
                               onDelete={() => removeSession(key, s.id)}
                               onCopy={() => setCopied([{ key, s }])}
                               onRepeat={(every, times) => repeatSession(d, s, every, times)}
-                              onEditDetail={() => (s.field ? setAerobic({ key, s }) : navigate({ to: "/sesiones/$sessionId", params: { sessionId: s.id } }))}
+                              onEditDetail={() => (s.field ? setAerobic({ key, s }) : navigate({ to: "/sesiones/$sessionId", params: { sessionId: s.id }, search: { athleteId } }))}
                             />
                             </Selectable>
                           ))}
@@ -692,7 +689,7 @@ function AthleteCalendar() {
                                   }}
                                 />
                               </div>
-                              {LAB_SESSIONS.filter((s) =>
+                              {labSessions.filter((s) =>
                                 s.name.toLowerCase().includes(q.trim().toLowerCase()),
                               ).map((s) => (
                                 <button
@@ -752,10 +749,30 @@ function AthleteCalendar() {
           hasDraft={selItems.some((i) => i.s.status === "draft")}
           hasPublished={selItems.some((i) => i.s.status === "published")}
           onCopy={() => setCopied(selItems)}
-          onDuplicate={() => ops.place(selItems, 7)}
-          onPublish={() => { ops.patch(sel.selected, (s) => (s.status === "draft" ? { ...s, status: "published" } : s)); toast.success("Sesión publicada ✓"); }}
-          onUnpublish={() => ops.patch(sel.selected, (s) => (s.status === "published" ? { ...s, status: "draft" } : s))}
-          onDelete={() => { ops.remove(sel.selected); sel.clear(); }}
+          onDuplicate={() => {
+            const created = ops.place(selItems, 7);
+            created.forEach(({ key, s }) =>
+              insertAthleteSession(athlete.coach_id, athlete.id, key, s).catch(() => reportError("No se pudo duplicar una sesión")),
+            );
+          }}
+          onPublish={() => {
+            const changed = selItems.filter((i) => i.s.status === "draft");
+            ops.patch(sel.selected, (s) => (s.status === "draft" ? { ...s, status: "published" } : s));
+            toast.success("Sesión publicada ✓");
+            changed.forEach((i) => patchAthleteSessionStatus(i.s.id, "published").catch(() => reportError("No se pudo publicar una sesión")));
+            if (changed.length) notifySessionsPublished(athlete.coach_id, athlete.id, changed.length);
+          }}
+          onUnpublish={() => {
+            const changed = selItems.filter((i) => i.s.status === "published");
+            ops.patch(sel.selected, (s) => (s.status === "published" ? { ...s, status: "draft" } : s));
+            changed.forEach((i) => patchAthleteSessionStatus(i.s.id, "draft").catch(() => reportError("No se pudo retirar la publicación")));
+          }}
+          onDelete={() => {
+            const ids = selItems.map((i) => i.s.id);
+            ops.remove(sel.selected);
+            sel.clear();
+            ids.forEach((id) => deleteAthleteSession(id).catch(() => reportError("No se pudo eliminar una sesión")));
+          }}
           onCancel={sel.clear}
         />
 
@@ -785,7 +802,7 @@ function AthleteCalendar() {
         ) : null}
 
         {/* PROGRESO */}
-        {tab === "Progreso" ? <AthleteProgress /> : null}
+        {tab === "Progreso" ? <AthleteProgress athleteId={athleteId} /> : null}
 
         {/* BIENESTAR */}
         {tab === "Bienestar" ? (
@@ -795,7 +812,7 @@ function AthleteCalendar() {
             >
               <p style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 10 }}>Últimos 7 días</p>
               <div className="grid" style={{ gridTemplateColumns: "1fr 90px 90px 90px 110px" }}>
-                {["Día", "Energía", "Sueño", "Ánimo", "Estado"].map((h, i) => (
+                {["Día", "Energía", "Sueño", "Cuerpo", "Estado"].map((h, i) => (
                   <div
                     key={h}
                     style={{
@@ -811,19 +828,25 @@ function AthleteCalendar() {
                     {h}
                   </div>
                 ))}
-                {WELLNESS_DAYS.map((w) => {
+                {buildWellnessRows(wellness).map((w) => {
                   const st =
                     w.state === "ok"
                       ? { bg: "#DCFCE7", color: "#16A34A", label: "OK" }
                       : w.state === "warn"
                         ? { bg: "#FEF9C3", color: "#854D0E", label: "En alerta" }
                         : { bg: "#F1F5F9", color: "#94A3B8", label: "Sin datos" };
+                  const label = (qId: string, v: number | null) =>
+                    v == null ? "—" : QUESTIONS.find((q) => q.id === qId)?.options[v]?.label ?? "—";
                   return (
                     <div key={w.day} style={{ display: "contents" }}>
                       <div style={{ fontSize: 13, color: "#374151", padding: "9px 0", borderTop: "1px solid #F1F5F9" }}>
                         {w.day}
                       </div>
-                      {[w.energy, w.sleep, w.mood].map((v, i) => (
+                      {([
+                        ["energia", w.energy],
+                        ["sueno", w.sleep],
+                        ["cuerpo", w.body],
+                      ] as const).map(([qId, v], i) => (
                         <div
                           key={i}
                           style={{
@@ -834,7 +857,7 @@ function AthleteCalendar() {
                             borderTop: "1px solid #F1F5F9",
                           }}
                         >
-                          {v === null ? "—" : `${v}/10`}
+                          {label(qId, v)}
                         </div>
                       ))}
                       <div
@@ -898,18 +921,14 @@ function AthleteCalendar() {
             >
               {saved ? (
                 <span style={{ position: "absolute", top: 12, right: 16, fontSize: 11, color: "#94A3B8" }}>
-                  Guardado
+                  Guardado ✓
                 </span>
               ) : null}
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                onBlur={() => {
-                  setSaved(true);
-                  window.setTimeout(() => setSaved(false), 2000);
-                }}
                 placeholder="Anotá observaciones, ajustes de programa, notas de progreso…"
-                aria-label="Notas privadas"
+                aria-label="Nueva nota"
                 style={{
                   width: "100%",
                   minHeight: 160,
@@ -922,23 +941,76 @@ function AthleteCalendar() {
                   backgroundColor: "transparent",
                 }}
               />
+              <div className="flex justify-end" style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  disabled={!notes.trim() || savingNote || !athlete}
+                  onClick={async () => {
+                    if (!notes.trim() || !athlete) return;
+                    setSavingNote(true);
+                    try {
+                      const created = await createAthleteNote(athlete.coach_id, athleteId, notes.trim());
+                      setAthleteNotes((prev) => [created, ...prev]);
+                      setNotes("");
+                      setSaved(true);
+                      window.setTimeout(() => setSaved(false), 2000);
+                    } catch {
+                      toast.error("No se pudo guardar la nota");
+                    } finally {
+                      setSavingNote(false);
+                    }
+                  }}
+                  style={{
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "7px 16px",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#FFFFFF",
+                    backgroundColor: notes.trim() ? "#111827" : "#CBD5E1",
+                    cursor: notes.trim() ? "pointer" : "default",
+                  }}
+                >
+                  {savingNote ? "Guardando…" : "Guardar nota"}
+                </button>
+              </div>
             </div>
 
-            {PREV_NOTES.map((n) => (
-              <div
-                key={n.when}
-                style={{
-                  marginTop: 8,
-                  backgroundColor: "#F8FAFC",
-                  borderRadius: 8,
-                  padding: "10px 12px",
-                  fontSize: 12,
-                  color: "#374151",
-                }}
-              >
-                {n.when} · “{n.text}”
-              </div>
-            ))}
+            {athleteNotes.length === 0 ? (
+              <p style={{ marginTop: 12, fontSize: 12, color: "#94A3B8" }}>Todavía no hay notas guardadas.</p>
+            ) : (
+              athleteNotes.map((n) => (
+                <div
+                  key={n.id}
+                  className="group flex items-start justify-between"
+                  style={{
+                    marginTop: 8,
+                    backgroundColor: "#F8FAFC",
+                    borderRadius: 8,
+                    padding: "10px 12px",
+                    fontSize: 12,
+                    color: "#374151",
+                    gap: 10,
+                  }}
+                >
+                  <span>
+                    {new Date(n.createdAt).toLocaleDateString("es-AR", { day: "numeric", month: "short" })} · “{n.body}”
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Eliminar nota"
+                    onClick={() => {
+                      setAthleteNotes((prev) => prev.filter((x) => x.id !== n.id));
+                      deleteAthleteNote(n.id).catch(() => toast.error("No se pudo eliminar la nota"));
+                    }}
+                    className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#CBD5E1" }}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         ) : null}
 
@@ -960,7 +1032,7 @@ function AthleteCalendar() {
               }}
             >
               <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 8 }}>
-                ¿Publicar {draftCount} sesiones para {athlete.name}?
+                ¿Publicar {draftCount} sesiones para {athlete.full_name}?
               </p>
               <p style={{ fontSize: 12, color: "#94A3B8", marginBottom: 18 }}>
                 El atleta va a ver estas sesiones en su app apenas las publiques.

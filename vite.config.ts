@@ -12,4 +12,11 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Allows the cloudflared quick tunnel (temporary, for testing Mercado Pago OAuth/webhooks
+  // locally) to reach the dev server — Vite rejects unrecognized Host headers by default.
+  vite: {
+    server: {
+      allowedHosts: ["miracle-still-treo-claire.trycloudflare.com"],
+    },
+  },
 });
