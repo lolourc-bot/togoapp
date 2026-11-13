@@ -15,9 +15,9 @@ import {
   Frown,
   Meh,
   Smile,
-  Dumbbell,
   type LucideIcon,
 } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 
 type Question = {
   id: string;

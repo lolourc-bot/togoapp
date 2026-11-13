@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, Copy, Dumbbell, Footprints, Link2, Plus, Search, Send, Trash2, Unlink } from "lucide-react";
+import { ChevronLeft, Copy, Footprints, Link2, Plus, Search, Send, Trash2, Unlink } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { toast } from "sonner";
 import { PhoneFrame } from "@/components/togo/Entrenamiento";
 import { getCoachId } from "@/lib/programs";

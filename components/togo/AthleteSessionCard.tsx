@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
-  Dumbbell,
   Edit2,
   EyeOff,
   Link2,
@@ -19,6 +18,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { fetchLibraryExercises, type LibraryExercise } from "@/lib/exercise-data";
 import { getCoachId } from "@/lib/programs";
 import { DenseSessionBlock, type DenseRow } from "@/components/togo/DenseSession";

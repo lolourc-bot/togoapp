@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Dumbbell, MessageCircle, UserPlus, Users, Users2, X, type LucideIcon } from "lucide-react";
+import { MessageCircle, UserPlus, Users, Users2, X, type LucideIcon } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { toast } from "sonner";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";

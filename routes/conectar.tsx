@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ChevronRight, Compass, Dumbbell, UserCircle2, type LucideIcon } from "lucide-react";
+import { ChevronRight, Compass, UserCircle2, type LucideIcon } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { BrandLogo } from "@/components/togo/BrandLogo";
 import { setUserContext } from "@/lib/user-context";
 

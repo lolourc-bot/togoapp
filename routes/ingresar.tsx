@@ -1,9 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { LoginShowcase } from "@/components/togo/LoginShowcase";
 import { useEffect, useState } from "react";
 import { Eye, EyeOff, User, Users, Building2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
+type LoginSearch = { modo?: "registro"; rol?: "institucion" };
+
 export const Route = createFileRoute("/ingresar")({
+  // ?modo=registro opens the sign-up form and ?rol=institucion preselects Club / Gimnasio (landing CTAs).
+  validateSearch: (search: Record<string, unknown>): LoginSearch => ({
+    ...(search["modo"] === "registro" ? { modo: "registro" as const } : {}),
+    ...(search["rol"] === "institucion" ? { rol: "institucion" as const } : {}),
+  }),
   component: LoginPage,
 });
 
@@ -14,15 +22,16 @@ const ROLES = [
 
 function LoginPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(search.modo === "registro" ? "register" : "login");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<"coach" | "institution">("coach");
+  const [role, setRole] = useState<"coach" | "institution">(search.rol === "institucion" ? "institution" : "coach");
   const [recovery, setRecovery] = useState(false);
   const [newPassword, setNewPassword] = useState("");
 
@@ -115,20 +124,7 @@ function LoginPage() {
     <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#F8FAFC" }}>
       {/* Panel izquierdo — esta pantalla es exclusivamente la entrada desktop; la entrada
           mobile tiene su propia pantalla dedicada en /coach-app/ingresar. */}
-      <div style={{ flex: 1, backgroundColor: "#0B1220", display: "flex", flexDirection: "column", justifyContent: "center", padding: "60px 80px" }}>
-        <div style={{ fontSize: 32, fontWeight: 800, color: "#FFFFFF", letterSpacing: -1 }}>TOGO</div>
-        <p style={{ fontSize: 18, color: "#9CA3AF", marginTop: 16, lineHeight: 1.6, maxWidth: 360 }}>
-          La plataforma de coaching deportivo para coaches, atletas e instituciones de Argentina y LATAM.
-        </p>
-        <div style={{ marginTop: 48, display: "flex", flexDirection: "column", gap: 16 }}>
-          {["Gestioná tus atletas en un solo lugar", "Planificá sesiones y carga de entrenamiento", "Comunicación directa con tu equipo"].map(t => (
-            <div key={t} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: "#10B981" }} />
-              <span style={{ fontSize: 14, color: "#D1D5DB" }}>{t}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <LoginShowcase />
 
       {/* Panel derecho */}
       <div style={{ width: 520, display: "flex", flexDirection: "column", justifyContent: "center", padding: "60px 64px", backgroundColor: "#FFFFFF", overflowY: "auto" }}>

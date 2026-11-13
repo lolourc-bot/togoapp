@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { CheckCircle2, ChevronDown, Dumbbell, Search, X, Zap } from "lucide-react";
+import { CheckCircle2, ChevronDown, Search, X, Zap } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { EMPTY_FILTERS, FilterSheet, FiltersButton, activeChips, matchFilters, sortCoaches, type MktCoach, type MktFilters } from "./MarketFilters";
 import { AthleteBottomNav } from "./AthleteBottomNav";
 import { CoachPlanSheet, useMyCoachRequest } from "./CoachPlanRequest";

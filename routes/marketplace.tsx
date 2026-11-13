@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Users, Dumbbell, ChevronRight } from "lucide-react";
+import { Users, ChevronRight } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { PhoneFrame } from "@/components/togo/Entrenamiento";
 import { AthleteBottomNav } from "@/components/togo/AthleteBottomNav";
 

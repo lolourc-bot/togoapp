@@ -1,4 +1,5 @@
-import { AlertCircle, Bell, Calendar, CheckCircle, Clock, CreditCard, Dumbbell, MessageCircle, Star, UserCheck, UserPlus, Users } from "lucide-react";
+import { AlertCircle, Bell, Calendar, CheckCircle, Clock, CreditCard, MessageCircle, Star, UserCheck, UserPlus, Users } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { NOTIF_STYLE } from "@/lib/notifications";
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {

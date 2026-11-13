@@ -2,7 +2,6 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { toast } from "sonner";
 import {
   Plus,
-  Dumbbell,
   GripVertical,
   User,
   LayoutTemplate,
@@ -16,6 +15,7 @@ import {
   ChevronUp,
   Check,
 } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import {
   fetchProgramCanvases,
   createProgramCanvas,
@@ -44,7 +44,7 @@ type CanvasSession = {
   exercises: CanvasExercise[];
 };
 
-type CanvasDoc = {
+export type CanvasDoc = {
   id: string;
   name: string;
   weeks: number;
@@ -55,6 +55,29 @@ export type LabCanvasHandle = {
   addWeek: () => void;
   newSession: () => void;
 };
+
+/** Persistence used by the canvas. The landing passes demo data and gets inert, never-saving stand-ins. */
+const REAL_API = {
+  createProgramCanvas,
+  renameProgramCanvas,
+  deleteProgramCanvas,
+  setProgramWeeks,
+  upsertProgramSession,
+  deleteProgramSession,
+  moveProgramSession,
+  assignProgramToAthletes,
+};
+const noop = async () => undefined;
+const DEMO_API = {
+  createProgramCanvas: async () => `demo-${Date.now()}`,
+  renameProgramCanvas: noop,
+  deleteProgramCanvas: noop,
+  setProgramWeeks: noop,
+  upsertProgramSession: noop,
+  deleteProgramSession: noop,
+  moveProgramSession: noop,
+  assignProgramToAthletes: noop,
+} as unknown as typeof REAL_API;
 
 let uid = 0;
 const nextId = () => `ex${++uid}`;
@@ -88,11 +111,16 @@ export const LabCanvas = forwardRef<
     onEditDetail?: (programId: string, key: string) => void;
     programs?: string[];
     athletes?: { id: string; name: string }[];
+    /** Landing demo: start from these programs and never save anything. */
+    demoCanvases?: CanvasDoc[] | undefined;
   }
->(function LabCanvas({ coachId, onEditDetail, programs = [], athletes = [] }, ref) {
-  const [canvases, setCanvases] = useState<CanvasDoc[]>([]);
-  const [activeId, setActiveId] = useState<string>("");
-  const [loaded, setLoaded] = useState(false);
+>(function LabCanvas({ coachId: coachIdProp, onEditDetail, programs = [], athletes = [], demoCanvases }, ref) {
+  const demo = !!demoCanvases;
+  const coachId = demo ? "demo" : coachIdProp;
+  const api = demo ? DEMO_API : REAL_API;
+  const [canvases, setCanvases] = useState<CanvasDoc[]>(demoCanvases ?? []);
+  const [activeId, setActiveId] = useState<string>(demoCanvases?.[0]?.id ?? "");
+  const [loaded, setLoaded] = useState(demo);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -118,7 +146,7 @@ export const LabCanvas = forwardRef<
   const active = canvases.find((c) => c.id === activeId) ?? canvases[0]!;
 
   useEffect(() => {
-    if (!coachId) return;
+    if (!coachId || demo) return;
     fetchProgramCanvases(coachId).then((cs) => {
       setCanvases(cs);
       setActiveId((prev) => prev || cs[0]?.id || "");
@@ -176,7 +204,7 @@ export const LabCanvas = forwardRef<
         const latest = latestDraft.current.get(id);
         if (!latest) return; // already sent by an earlier queued write
         latestDraft.current.delete(id);
-        await upsertProgramSession(coachId, programId, week, day, slot, latest);
+        await api.upsertProgramSession(coachId, programId, week, day, slot, latest);
       },
       "No se pudo guardar la sesión",
     );
@@ -192,13 +220,13 @@ export const LabCanvas = forwardRef<
     const id = `${programId}:${key}`;
     const { week, day, slot } = keyParts(key);
     latestDraft.current.delete(id);
-    enqueueWrite(id, () => deleteProgramSession(programId, week, day, slot), "No se pudo eliminar la sesión");
+    enqueueWrite(id, () => api.deleteProgramSession(programId, week, day, slot), "No se pudo eliminar la sesión");
   };
 
   const addWeek = () => {
     const nextWeeks = active.weeks + 1;
     patchActive((c) => ({ ...c, weeks: nextWeeks }));
-    setProgramWeeks(active.id, nextWeeks).catch(() => toast.error("No se pudo agregar la semana"));
+    api.setProgramWeeks(active.id, nextWeeks).catch(() => toast.error("No se pudo agregar la semana"));
   };
 
   const freeCells = (sessions: Record<string, CanvasSession>, weeks: number, count: number) => {
@@ -234,10 +262,10 @@ export const LabCanvas = forwardRef<
       return { ...c, sessions, weeks };
     });
     if (!coachId) return;
-    if (weeksAfter !== active.weeks) setProgramWeeks(active.id, weeksAfter).catch(() => toast.error("No se pudo guardar la semana nueva"));
+    if (weeksAfter !== active.weeks) api.setProgramWeeks(active.id, weeksAfter).catch(() => toast.error("No se pudo guardar la semana nueva"));
     created.forEach(({ key, session }) => {
       const { week, day, slot } = keyParts(key);
-      upsertProgramSession(coachId, active.id, week, day, slot, session).catch(() => toast.error("No se pudo duplicar una sesión"));
+      api.upsertProgramSession(coachId, active.id, week, day, slot, session).catch(() => toast.error("No se pudo duplicar una sesión"));
     });
   };
 
@@ -629,7 +657,7 @@ export const LabCanvas = forwardRef<
         <button
           type="button"
           onClick={() => {
-            createProgramCanvas(coachId, "Programa 1")
+            api.createProgramCanvas(coachId, "Programa 1")
               .then((id) => {
                 setCanvases([{ id, name: "Programa 1", weeks: 2, sessions: {} }]);
                 setActiveId(id);
@@ -684,7 +712,7 @@ export const LabCanvas = forwardRef<
                   }
                   onBlur={() => {
                     setRenaming(null);
-                    renameProgramCanvas(c.id, c.name).catch(() => toast.error("No se pudo renombrar el programa"));
+                    api.renameProgramCanvas(c.id, c.name).catch(() => toast.error("No se pudo renombrar el programa"));
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -716,7 +744,7 @@ export const LabCanvas = forwardRef<
                       setActiveId(rest[0]!.id);
                     }
                     setConfirmClose(null);
-                    deleteProgramCanvas(c.id).catch(() => toast.error("No se pudo eliminar el programa"));
+                    api.deleteProgramCanvas(c.id).catch(() => toast.error("No se pudo eliminar el programa"));
                   } else {
                     setConfirmClose(c.id);
                   }
@@ -752,7 +780,7 @@ export const LabCanvas = forwardRef<
           onClick={() => {
             if (!coachId) return;
             const name = `Programa ${canvases.length + 1}`;
-            createProgramCanvas(coachId, name)
+            api.createProgramCanvas(coachId, name)
               .then((id) => {
                 const c: CanvasDoc = { id, name, weeks: 2, sessions: {} };
                 setCanvases((prev) => [...prev, c]);
@@ -1000,7 +1028,7 @@ export const LabCanvas = forwardRef<
                       const programId = active.id;
                       enqueueWrite(
                         `${programId}:${from}`,
-                        () => moveProgramSession(programId, keyParts(from), keyParts(newKey)),
+                        () => api.moveProgramSession(programId, keyParts(from), keyParts(newKey)),
                         "No se pudo mover la sesión",
                       );
                     }}
@@ -1159,7 +1187,7 @@ export const LabCanvas = forwardRef<
                 onClick={() => {
                   if (!coachId) return;
                   const startDate = new Date().toISOString().slice(0, 10);
-                  assignProgramToAthletes(coachId, active.id, assignPick, startDate)
+                  api.assignProgramToAthletes(coachId, active.id, assignPick, startDate)
                     .then(() => {
                       setAssignOpen(false);
                       setAssignPick([]);

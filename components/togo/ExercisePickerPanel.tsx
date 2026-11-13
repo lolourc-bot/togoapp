@@ -12,10 +12,13 @@ export function ExercisePickerPanel({
   open,
   onClose,
   onAdd,
+  demoLibrary,
 }: {
   open: boolean;
   onClose: () => void;
   onAdd: (exercise: LibraryExercise) => void;
+  /** Landing demo: use this library instead of the coach's, and add new exercises only to the session. */
+  demoLibrary?: LibraryExercise[] | undefined;
 }) {
   const [query, setQuery] = useState("");
   const [pattern, setPattern] = useState("Todos");
@@ -33,12 +36,16 @@ export function ExercisePickerPanel({
   const [library, setLibrary] = useState<LibraryExercise[]>([]);
 
   useEffect(() => {
+    if (demoLibrary) {
+      setLibrary(demoLibrary);
+      return;
+    }
     getCoachId().then((cid) => {
       if (!cid) return;
       setCoachId(cid);
       fetchLibraryExercises(cid).then(setLibrary);
     });
-  }, []);
+  }, [demoLibrary]);
 
   if (!open) return null;
 
@@ -239,7 +246,7 @@ export function ExercisePickerPanel({
                 <Plus size={16} color="var(--color-primary)" />
                 <span className="flex flex-col">
                   <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Agregar '{query.trim()}'</span>
-                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Se guardará en tu biblioteca del Lab.</span>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{demoLibrary ? "Se suma solo a esta sesión de prueba." : "Se guardará en tu biblioteca del Lab."}</span>
                 </span>
               </div>
             </div>
@@ -251,6 +258,22 @@ export function ExercisePickerPanel({
         initial={quickInitial}
         onClose={() => setQuick(false)}
         onSave={(input: NewExerciseInput) => {
+          if (demoLibrary) {
+            // Demo: the exercise lives only in this session; nothing is written to the library.
+            const ex: LibraryExercise = {
+              name: input.name,
+              pattern: input.pattern as LibraryExercise["pattern"],
+              equipment: input.equipment,
+              laterality: input.laterality as LibraryExercise["laterality"],
+              source: "Coach",
+              ...(input.videoUrl ? { videoUrl: input.videoUrl } : {}),
+            };
+            setLibrary((prev) => [ex, ...prev]);
+            onAdd(ex);
+            setQuick(false);
+            setQuery("");
+            return;
+          }
           if (!coachId) return;
           createLibraryExercise(coachId, {
             name: input.name,

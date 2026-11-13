@@ -6,7 +6,6 @@ import {
   Clock,
   Eye,
   ChevronRight,
-  Info,
   MessageCircle,
   Moon,
   MoreHorizontal,
@@ -881,28 +880,6 @@ function AthleteCalendar() {
                 })}
               </div>
             </div>
-
-            <div
-              className="flex items-start"
-              style={{
-                marginTop: 16,
-                backgroundColor: "#FFFBEB",
-                border: "1px solid #FDE68A",
-                borderRadius: 12,
-                padding: "14px 16px",
-                gap: 10,
-              }}
-            >
-              <Info size={16} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
-              <div>
-                <p style={{ fontSize: 12, fontWeight: 600, color: "#92400E", marginBottom: 4 }}>Sugerencia IA</p>
-                <p style={{ fontSize: 12, color: "#92400E", lineHeight: 1.6 }}>
-                  El sueño bajó a mitad de semana. Sostené la carga actual y sumá una entrada en frío o movilidad
-                  antes de aumentar el volumen. Esta sugerencia es orientativa y no reemplaza tu criterio profesional.
-                </p>
-              </div>
-            </div>
-
           </div>
         ) : null}
 

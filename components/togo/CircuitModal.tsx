@@ -237,12 +237,15 @@ export function CircuitModal({
   onSubmit,
   initial,
   mode = "create",
+  demoLibrary,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (config: CircuitConfig) => void;
   initial?: CircuitConfig | null;
   mode?: "create" | "edit";
+  /** Landing demo: search this library instead of loading the coach's. */
+  demoLibrary?: LibraryExercise[] | undefined;
 }) {
   const [cfg, setCfg] = useState<CircuitConfig>(initial ?? emptyCircuitConfig());
   const [videoOpen, setVideoOpen] = useState<number | null>(null);
@@ -251,10 +254,14 @@ export function CircuitModal({
   const [library, setLibrary] = useState<LibraryExercise[]>([]);
 
   useEffect(() => {
+    if (demoLibrary) {
+      setLibrary(demoLibrary);
+      return;
+    }
     getCoachId().then((cid) => {
       if (cid) fetchLibraryExercises(cid).then(setLibrary);
     });
-  }, []);
+  }, [demoLibrary]);
 
   useEffect(() => {
     if (open)

@@ -1,6 +1,7 @@
 import { Link, useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CalendarCheck, MessageCircle, Clock, Compass, Dumbbell, TrendingUp, User } from "lucide-react";
+import { CalendarCheck, MessageCircle, Clock, Compass, TrendingUp, User } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { useTimerRunning } from "./AthleteTimer";
 import { useUserContext } from "@/lib/user-context";
 import { ME, useCoachRequests } from "@/lib/coach-requests";
@@ -19,7 +20,20 @@ const ALL = {
   Progreso: { icon: TrendingUp, to: "/progreso" },
   Perfil: { icon: User, to: "/perfil" },
 } as const;
-type NavTab = keyof typeof ALL;
+export type NavTab = keyof typeof ALL;
+
+function Tab({ demo, to, athleteId, label, on, children }: { demo: boolean; to: (typeof ALL)[NavTab]["to"]; athleteId?: string | undefined; label: string; on: boolean; children: React.ReactNode }) {
+  const className = "flex flex-col items-center";
+  const style = { gap: 3, padding: "8px 0" };
+  if (demo) {
+    return <span aria-label={label} aria-current={on ? "page" : undefined} className={className} style={style}>{children}</span>;
+  }
+  return (
+    <Link to={to} search={athleteId ? { athleteId } : {}} aria-label={label} aria-current={on ? "page" : undefined} className={className} style={style}>
+      {children}
+    </Link>
+  );
+}
 
 /** True when the gym member has a coach (chosen at onboarding or assigned by the gym). */
 export function useHasCoach() {
@@ -54,6 +68,25 @@ export function AthleteBottomNav({ active }: { active?: AthleteTab }) {
         ? ["Marketplace", "Timer", "Perfil"]
         : ["Training", "Timer", "Progreso", "Perfil"];
   const labels: NavTab[] = [base[0]!, "Mensajes", ...base.slice(1)];
+  return <AthleteNavBar labels={labels} current={current} running={running} unread={unread} athleteId={athleteId} />;
+}
+
+/** The athlete tab bar itself. `demo` renders inert tabs (no navigation) for the landing mockup. */
+export function AthleteNavBar({
+  labels,
+  current,
+  running = false,
+  unread = false,
+  athleteId,
+  demo = false,
+}: {
+  labels: NavTab[];
+  current?: AthleteTab | undefined;
+  running?: boolean;
+  unread?: boolean;
+  athleteId?: string | undefined;
+  demo?: boolean;
+}) {
   return (
     <nav
       className="grid shrink-0 items-center"
@@ -63,7 +96,7 @@ export function AthleteBottomNav({ active }: { active?: AthleteTab }) {
         const { icon: Icon, to } = ALL[label];
         const on = label === current;
         return (
-          <Link key={label} to={to} search={athleteId ? { athleteId } : {}} aria-label={label} aria-current={on ? "page" : undefined} className="flex flex-col items-center" style={{ gap: 3, padding: "8px 0" }}>
+          <Tab key={label} demo={demo} to={to} athleteId={athleteId} label={label} on={on}>
             <span className="relative" style={{ lineHeight: 0 }}>
               <Icon size={22} color={on ? "#111827" : "#CBD5E1"} />
               {label === "Timer" && running ? (
@@ -74,7 +107,7 @@ export function AthleteBottomNav({ active }: { active?: AthleteTab }) {
               ) : null}
             </span>
             <span style={{ fontSize: on ? 10 : 9, fontWeight: on ? 600 : 500, color: on ? "#111827" : "#94A3B8" }}>{label}</span>
-          </Link>
+          </Tab>
         );
       })}
     </nav>

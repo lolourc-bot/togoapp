@@ -2,7 +2,7 @@ import { NewCoachGate, markNewCoach } from "@/components/togo/EmptyStates";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CoachOnboarding } from "@/components/togo/Onboarding";
-import { RoleGate } from "@/components/togo/RoleGate";
+import { Landing } from "@/components/togo/Landing";
 import { Sidebar } from "@/components/togo/Sidebar";
 import { TopBar } from "@/components/togo/TopBar";
 import { ActivityFeed } from "@/components/togo/ActivityFeed";
@@ -15,17 +15,16 @@ import { supabase } from "@/lib/supabase";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "TOGO · Panel de entrenamiento para coaches" },
+      { title: "TOGO · Entrenar a tus atletas nunca fue tan fácil" },
       {
         name: "description",
         content:
-          "TOGO App: gestioná tus atletas, carga de entrenamiento, planificación y actividad diaria desde un solo panel.",
+          "Planificación, seguimiento y cobros para coaches, clubes y gimnasios. Gratis hasta 3 atletas.",
       },
-      { property: "og:title", content: "TOGO · Panel de entrenamiento para coaches" },
+      { property: "og:title", content: "TOGO · Entrenar a tus atletas nunca fue tan fácil" },
       {
         property: "og:description",
-        content:
-          "Gestioná atletas, carga de entrenamiento y planificación semanal desde un panel profesional.",
+        content: "Planificación, seguimiento y cobros para coaches, clubes y gimnasios. Gratis hasta 3 atletas.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -79,7 +78,7 @@ function Index() {
     });
   }, []);
   if (!roleChecked || (hasSession && onb === null)) return <div style={{ minHeight: "100vh", background: "#FFF" }} />;
-  if (!hasSession) return <RoleGate />;
+  if (!hasSession) return <Landing />;
   if (!onb) return (
     <CoachOnboarding
       onFinish={async (to) => {

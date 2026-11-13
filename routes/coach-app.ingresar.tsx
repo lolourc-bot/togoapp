@@ -6,19 +6,22 @@ import { BrandLogo } from "@/components/togo/BrandLogo";
 import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/coach-app/ingresar")({
+  validateSearch: (search: Record<string, unknown>): { modo?: "registro" } =>
+    search["modo"] === "registro" ? { modo: "registro" } : {},
   head: () => ({ meta: [{ title: "Ingresar · TOGO" }] }),
   component: CoachAppLogin,
 });
 
 function CoachAppLogin() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(search.modo === "registro" ? "register" : "login");
   const [name, setName] = useState("");
   const [recovery, setRecovery] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -113,11 +116,17 @@ function CoachAppLogin() {
 
   return (
     <PhoneFrame>
-      <div className="flex flex-1 flex-col" style={{ padding: "48px 24px 24px", overflowY: "auto", overflowX: "hidden" }}>
-        <div className="flex items-center" style={{ gap: 10, marginBottom: 28 }}>
-          <BrandLogo className="h-9 w-9" />
-          <span style={{ fontSize: 18, fontWeight: 800, color: "#111827", letterSpacing: -0.5 }}>TOGO</span>
+      <div className="flex flex-1 flex-col" style={{ overflowY: "auto", overflowX: "hidden" }}>
+        {/* Photo header (same photo as the desktop login), fading into the form */}
+        <div className="relative shrink-0 overflow-hidden" style={{ height: 300 }}>
+          <img src="/login-athlete.jpg" alt="" className="absolute inset-0 h-full w-full object-cover object-[62%_30%]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(1,23,38,0.55)_0%,rgba(1,23,38,0.25)_45%,rgba(248,250,252,0)_62%,#F8FAFC_100%)]" />
+          <div className="relative flex items-center" style={{ gap: 10, padding: "48px 24px 0" }}>
+            <BrandLogo className="h-9 w-9" />
+            <span className="text-white" style={{ fontSize: 18, fontWeight: 800, letterSpacing: -0.5 }}>TOGO</span>
+          </div>
         </div>
+      <div className="flex flex-1 flex-col" style={{ padding: "4px 24px 24px" }}>
 
         <h1 style={{ fontSize: 20, fontWeight: 700, color: "#111827", marginBottom: 4 }}>
           {mode === "login" ? "Bienvenido de vuelta" : "Creá tu cuenta"}
@@ -180,6 +189,7 @@ function CoachAppLogin() {
             {mode === "login" ? "Registrate gratis" : "Ingresá"}
           </span>
         </p>
+      </div>
       </div>
     </PhoneFrame>
   );

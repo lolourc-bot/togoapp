@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   Clock,
-  Dumbbell,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -13,6 +12,7 @@ import {
   ChevronUp,
   Link2,
 } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { fetchLibraryExercises, type LibraryExercise } from "@/lib/exercise-data";
 import { getCoachId } from "@/lib/programs";
 import {

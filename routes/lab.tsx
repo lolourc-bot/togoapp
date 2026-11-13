@@ -5,7 +5,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   Plus,
   LayoutTemplate,
-  Dumbbell,
   Search,
   MoreHorizontal,
   Edit2,
@@ -19,6 +18,7 @@ import {
   X,
   Check,
 } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { Sidebar } from "@/components/togo/Sidebar";
 import { LabCanvas, type LabCanvasHandle } from "@/components/togo/LabCanvas";
 import { LabBlocks, type LabBlocksHandle } from "@/components/togo/LabBlocks";

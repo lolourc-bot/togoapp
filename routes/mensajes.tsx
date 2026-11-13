@@ -5,7 +5,6 @@ import {
   BookOpen,
   Calendar,
   CheckCheck,
-  Dumbbell,
   Image as ImageIcon,
   MessageCircle,
   MoreHorizontal,
@@ -16,6 +15,7 @@ import {
   UserCheck,
   Users2,
 } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { Sidebar } from "@/components/togo/Sidebar";
 import { toast } from "sonner";
 import { getCoachId } from "@/lib/programs";

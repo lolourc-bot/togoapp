@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Activity, Calendar, CheckCircle, ChevronRight, Clock, Dumbbell, Heart, MoreHorizontal, PartyPopper, Target, TrendingDown, TrendingUp, Trophy, User, X } from "lucide-react";
+import { Activity, Calendar, CheckCircle, ChevronRight, Clock, Heart, MoreHorizontal, PartyPopper, Target, TrendingDown, TrendingUp, Trophy, User, X } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { ME, markSeen, submitRequest, useCoachRequests } from "@/lib/coach-requests";
 import { useUserContext } from "@/lib/user-context";
 

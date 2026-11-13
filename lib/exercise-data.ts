@@ -95,6 +95,21 @@ export const EQUIPMENT_OPTIONS = [
 export const LATERALITY_OPTIONS = ["Todos", "Bilateral", "Unilateral"];
 
 /** Real exercise picker list: TOGO's catalog + the coach's own library (same content as /biblioteca). */
+/** TOGO's shared library only (readable without signing in): used by the landing's try-it editor. */
+export async function fetchTogoLibrary(): Promise<LibraryExercise[]> {
+  const togo = await fetchTogoVideos();
+  return togo
+    .filter((v) => v.pattern)
+    .map((v) => ({
+      name: v.name,
+      pattern: v.pattern as MovementPattern,
+      equipment: v.equipment || "Peso corporal",
+      laterality: (v.laterality as Laterality) || "Bilateral",
+      source: "TOGO",
+      ...(v.videoUrl ? { videoUrl: v.videoUrl } : {}),
+    }));
+}
+
 export async function fetchLibraryExercises(coachId: string): Promise<LibraryExercise[]> {
   const [togo, own] = await Promise.all([fetchTogoVideos(), fetchOwnVideos(coachId)]);
   const togoItems: LibraryExercise[] = togo

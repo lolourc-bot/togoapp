@@ -38,9 +38,33 @@ import { startInstitutionStripeCheckout, createInstitutionStripePortalSession, c
 import { startInstitutionMpSubscription, cancelInstitutionMpSubscription, changeInstitutionMpTier } from "@/lib/institution-billing-mp";
 import { resyncInstitutionBilling } from "@/lib/institution-billing-sync";
 import {
-  LayoutDashboard, Users2, Dumbbell, CalendarDays, BarChart2, CreditCard, Settings2,
-  LogOut, CheckCircle2, Trophy, Users, Plus, Shield, Clock, MapPin, User, X, Edit2, ChevronDown, CheckSquare, Activity, UserPlus, ChevronLeft, ChevronRight, Trash2, Upload,
+  LayoutDashboard,
+  Users2,
+  CalendarDays,
+  BarChart2,
+  CreditCard,
+  Settings2,
+  LogOut,
+  CheckCircle2,
+  Trophy,
+  Users,
+  Plus,
+  Shield,
+  Clock,
+  MapPin,
+  User,
+  X,
+  Edit2,
+  ChevronDown,
+  CheckSquare,
+  Activity,
+  UserPlus,
+  ChevronLeft,
+  ChevronRight,
+  Trash2,
+  Upload,
 } from "lucide-react";
+import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 
 export const Route = createFileRoute("/institucion")({
   head: () => ({

@@ -78,6 +78,10 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   );
 }
 
+// Social crawlers need an absolute og:image URL; set VITE_APP_URL to the public domain on deploy.
+const SITE_URL = (import.meta.env["VITE_APP_URL"] as string | undefined)?.replace(/\/$/, "") ?? "";
+const OG_IMAGE = `${SITE_URL}/og-image.png`;
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
@@ -85,13 +89,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "color-scheme", content: "light" },
       { title: "TOGO — Coaching deportivo" },
-      { name: "description", content: "Plataforma de entrenamiento para coaches, atletas e instituciones." },
-      { name: "author", content: "Lovable" },
+      { name: "description", content: "Planificación, seguimiento y cobros para coaches, clubes y gimnasios." },
+      { name: "author", content: "TOGO" },
+      { property: "og:site_name", content: "TOGO" },
+      { property: "og:locale", content: "es_AR" },
       { property: "og:title", content: "TOGO — Coaching deportivo" },
-      { property: "og:description", content: "Plataforma de entrenamiento para coaches, atletas e instituciones." },
+      { property: "og:description", content: "Planificación, seguimiento y cobros para coaches, clubes y gimnasios." },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: OG_IMAGE },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:image:alt", content: "TOGO: Entrenar a tus atletas nunca fue tan fácil." },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:image", content: OG_IMAGE },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },

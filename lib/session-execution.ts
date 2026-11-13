@@ -1,8 +1,9 @@
 import { supabase } from "@/lib/supabase";
 import type { CircuitType } from "@/components/togo/CircuitModal";
+import { fetchLibraryExercises } from "@/lib/exercise-data";
 
 export type ExecSetRow = { reps: string; weight: string; done: boolean; note: string; noteOpen: boolean; manual?: boolean };
-export type ExecExercise = { id: string; label: string; name: string; suggestion: string; sets: ExecSetRow[] };
+export type ExecExercise = { id: string; label: string; name: string; suggestion: string; videoUrl?: string; sets: ExecSetRow[] };
 export type ExecCircuit = { type: CircuitType; name: string; rounds: number; minutes: number; items: { name: string; reps: string }[] };
 export type ExecBlock = { letter: string; exercises: ExecExercise[]; circuit?: ExecCircuit };
 
@@ -47,6 +48,15 @@ export async function fetchSessionForExecution(sessionId: string): Promise<Sessi
 
   const blocks: ExecBlock[] = [];
   let letterCode = 65;
+  // Exercise videos come from the library (TOGO's and the coach's own), matched by exercise name.
+  const videos = new Map<string, string>();
+  try {
+    const library = await fetchLibraryExercises(data.coach_id);
+    for (const ex of library) if (ex.videoUrl) videos.set(ex.name.trim().toLowerCase(), ex.videoUrl);
+  } catch {
+    // No library access: the session still opens, just without videos.
+  }
+
   let i = 0;
   while (i < items.length) {
     let j = i + 1;
@@ -58,6 +68,7 @@ export async function fetchSessionForExecution(sessionId: string): Promise<Sessi
       label: `${letter}${k + 1}`,
       name: item.name,
       suggestion: "",
+      ...(videos.get(item.name.trim().toLowerCase()) ? { videoUrl: videos.get(item.name.trim().toLowerCase())! } : {}),
       sets: plannedSets(item.sets, item.reps, item.weight).map((base, si) => {
         const s = saved.get(`${item.id}:${si}`);
         return { reps: s?.reps ?? base.reps, weight: s?.weight ?? base.weight, done: s?.done ?? false, note: s?.note ?? "", noteOpen: false };
