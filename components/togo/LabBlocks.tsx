@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { uniqueName } from "@/lib/unique-name";
 import { toast } from "sonner";
 import { Search, MoreHorizontal, Plus } from "lucide-react";
 import { CircuitModal, circuitTimerLabel, emptyCircuitConfig, type CircuitConfig } from "@/components/togo/CircuitModal";
@@ -149,7 +150,7 @@ export const LabBlocks = forwardRef<LabBlocksHandle, { coachId: string | null }>
                               setModalOpen(true);
                             }
                             if (m === "Duplicar" && coachId) {
-                              const clone = { ...c, name: `${c.name} (copia)` };
+                              const clone = { ...c, name: uniqueName(`${c.name} (copia)`, circuits.map((t) => t.config.name)) };
                               createCircuitTemplate(coachId, clone)
                                 .then((id) => setCircuits((prev) => [...prev, { id, config: clone }]))
                                 .catch(() => toast.error("No se pudo duplicar el circuito"));
@@ -244,6 +245,7 @@ export const LabBlocks = forwardRef<LabBlocksHandle, { coachId: string | null }>
           setEditIndex(null);
         }}
         onSubmit={submit}
+        takenNames={circuits.map((t) => t.config.name)}
       />
     </div>
   );

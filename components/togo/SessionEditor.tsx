@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { NAME_TAKEN_MSG, isNameTaken, uniqueName } from "@/lib/unique-name";
 import { useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
@@ -30,7 +31,9 @@ import { fetchLibraryExercises, youtubeThumbnail, youtubeEmbedUrl, youtubeVideoI
 import { loadYoutubeIframeApi } from "@/lib/youtube-player";
 import { supabase } from "@/lib/supabase";
 import { getCoachId } from "@/lib/programs";
-import { fetchSessionTemplate, createSessionTemplate, updateSessionTemplate } from "@/lib/session-templates";
+import { fetchSessionTemplate, fetchSessionTemplates, createSessionTemplate, updateSessionTemplate } from "@/lib/session-templates";
+import { createCircuitTemplate, fetchCircuitTemplates } from "@/lib/circuit-templates";
+import { CircuitPickerModal } from "./CircuitPickerModal";
 import type { LabSession, Ex } from "@/components/togo/LabSessions";
 import {
   fetchAthleteSessionById,
@@ -38,9 +41,11 @@ import {
   updateAthleteSession,
   fetchExerciseHistory,
   fetchAthleteWeekStatus,
+  fetchAthleteWeekSessions,
+  type WeekDaySessionRef,
   type ExerciseHistoryPoint,
 } from "@/lib/athlete-sessions";
-import { fetchTeamSessionGroup, addTeamSession, patchTeamSessionGroup, fetchTeamWeekStatus } from "@/lib/team-sessions";
+import { fetchTeamSessionGroup, addTeamSession, patchTeamSessionGroup, fetchTeamWeekStatus, fetchTeamWeekSessions } from "@/lib/team-sessions";
 import { fetchProgramSession, fetchProgramMeta, upsertProgramSession, fetchProgramSessionDays } from "@/lib/program-canvas";
 import type { DaySession } from "@/components/togo/AthleteSessionCard";
 
@@ -356,6 +361,8 @@ export type SessionEditorDemo = {
     name: string;
     date: string;
     weekStatus: Record<string, DaySession["status"]>;
+    /** Days whose only session is a field (cardio) session, drawn grey like in the real editor. */
+    fieldDays?: string[];
     history: Record<string, { last: ExerciseHistoryPoint | null; pr: ExerciseHistoryPoint | null }>;
   };
 };
@@ -398,7 +405,7 @@ export function SessionEditor({
     else navigate({ to: "/lab" });
   };
 
-  const [sessionName, setSessionName] = useState("Nueva sesión");
+  const [sessionName, setSessionName] = useState("");
   const [status, setStatus] = useState<DaySession["status"]>("draft");
   const [category, setCategory] = useState<LabSession["category"]>("Fuerza");
 
@@ -409,6 +416,13 @@ export function SessionEditor({
   const [extras, setExtras] = useState<Extra[][]>([]);
   const [groups, setGroups] = useState<number[][]>([]);
   const [customCircuits, setCustomCircuits] = useState<CircuitConfig[]>([]);
+  const [circuitPickerOpen, setCircuitPickerOpen] = useState(false);
+  /** Signatures of the circuits in the coach's library, to show "Guardado" on circuits already saved. */
+  const [savedCircuitSigs, setSavedCircuitSigs] = useState<Set<string>>(new Set());
+  const [libraryCircuitNames, setLibraryCircuitNames] = useState<string[]>([]);
+  /** Lab templates: names of the coach's other Lab sessions (a template's name must be unique). */
+  const [otherTemplateNames, setOtherTemplateNames] = useState<string[]>([]);
+  const [savingCircuit, setSavingCircuit] = useState<number | null>(null);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [circuitOpen, setCircuitOpen] = useState(false);
@@ -427,12 +441,17 @@ export function SessionEditor({
   const [videoModal, setVideoModal] = useState<string | null>(null);
   const [realDate, setRealDate] = useState<string | null>(null);
   const [weekStatus, setWeekStatus] = useState<Record<string, DaySession["status"]>>({});
+  const [weekSessions, setWeekSessions] = useState<Record<string, WeekDaySessionRef[]>>({});
   const [programWeeks, setProgramWeeks] = useState(2);
   const [programDays, setProgramDays] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!coachId) return;
     fetchLibraryExercises(coachId).then(setLibrary);
+    fetchCircuitTemplates(coachId).then((list) => {
+      setSavedCircuitSigs(new Set(list.map((t) => JSON.stringify(t.config))));
+      setLibraryCircuitNames(list.map((t) => t.config.name));
+    });
   }, [coachId]);
 
   const videoByName = new Map(library.filter((e) => e.videoUrl).map((e) => [e.name.trim().toLowerCase(), e.videoUrl!]));
@@ -490,6 +509,9 @@ export function SessionEditor({
         setHeaderSub(demo.athlete.name);
         setRealDate(demo.athlete.date);
         setWeekStatus(demo.athlete.weekStatus);
+        setWeekSessions(
+          Object.fromEntries((demo.athlete.fieldDays ?? []).map((d) => [d, [{ id: `demo-${d}`, status: "published", field: true }]])),
+        );
       }
       applyLoaded(demo.name, demo.exercises, []);
       setLoading(false);
@@ -508,6 +530,7 @@ export function SessionEditor({
           if (tpl) {
             setRecordId(tpl.id);
             setCategory(tpl.category);
+            if (cid) fetchSessionTemplates(cid).then((all) => setOtherTemplateNames(all.filter((t) => t.id !== tpl.id).map((t) => t.name)));
             setHeaderLabel(tpl.category);
             applyLoaded(
               tpl.name,
@@ -518,6 +541,11 @@ export function SessionEditor({
         } else {
           setHeaderLabel("Fuerza");
           setSessionName("Nueva sesión");
+          if (cid) fetchSessionTemplates(cid).then((all) => {
+            const names = all.map((t) => t.name);
+            setOtherTemplateNames(names);
+            setSessionName(uniqueName("Nueva sesión", names));
+          });
         }
       } else if (mode === "team") {
         const { data: team } = await supabase.from("teams").select("name").eq("id", search.teamId!).single();
@@ -532,10 +560,11 @@ export function SessionEditor({
             applyLoaded(group.name, group.items.map((e) => loadedFromCalEx(e)), group.circuits);
           }
         } else {
-          setSessionName("Nueva sesión");
+          setSessionName(""); // calendar sessions don't need a name
         }
         setRealDate(date);
         fetchTeamWeekStatus(search.teamId!, date).then(setWeekStatus);
+        fetchTeamWeekSessions(search.teamId!, date).then(setWeekSessions);
       } else if (mode === "athlete") {
         const { data: athlete } = await supabase.from("athletes").select("full_name").eq("id", search.athleteId!).single();
         setHeaderSub(athlete?.full_name ?? "Atleta");
@@ -549,10 +578,11 @@ export function SessionEditor({
             applyLoaded(s.name, s.items.map((e) => loadedFromCalEx(e)), s.circuits);
           }
         } else {
-          setSessionName("Nueva sesión");
+          setSessionName(""); // calendar sessions don't need a name
         }
         setRealDate(date);
         fetchAthleteWeekStatus(search.athleteId!, date).then(setWeekStatus);
+        fetchAthleteWeekSessions(search.athleteId!, date).then(setWeekSessions);
       } else if (mode === "program") {
         const meta = await fetchProgramMeta(search.programId!);
         setHeaderSub(meta?.name ?? "Programa");
@@ -567,12 +597,12 @@ export function SessionEditor({
         setProgramDays(days);
         if (ps) {
           applyLoaded(
-            ps.name || "Nueva sesión",
+            ps.name || "",
             ps.exercises.map((e) => loadedFromCalEx({ ...e, chain: e.chained })),
             ps.circuits ?? [],
           );
         } else {
-          setSessionName("Nueva sesión");
+          setSessionName(""); // calendar sessions don't need a name
         }
       }
       if (!cancelled) setLoading(false);
@@ -654,6 +684,33 @@ export function SessionEditor({
   };
   const setCircuitDescription = (ci: number, description: string) => setCustomCircuits((prev) => prev.map((c, i) => (i === ci ? { ...c, description } : c)));
   const renameCircuit = (ci: number, name: string) => setCustomCircuits((prev) => prev.map((c, i) => (i === ci ? { ...c, name: name.trim() || c.name } : c)));
+  /** "Agregar circuito": pick one already built (library / Lab) or create a new one. The demo goes straight to new. */
+  const startAddCircuit = () => {
+    setEditingCircuit(null);
+    if (demo || !coachId) setCircuitOpen(true);
+    else setCircuitPickerOpen(true);
+  };
+  const addExistingCircuit = (config: CircuitConfig) => {
+    // Same circuit added twice to one session gets "Nombre 2" so names stay unique.
+    setCustomCircuits((prev) => [...prev, { ...structuredClone(config), name: uniqueName(config.name || "Circuito", prev.map((c) => c.name)) }]);
+    setCircuitPickerOpen(false);
+    toast.success(`"${config.name || "Circuito"}" agregado a la sesión`);
+  };
+  const saveCircuitToLibrary = async (ci: number) => {
+    const c = customCircuits[ci];
+    if (!c || !coachId) return;
+    setSavingCircuit(ci);
+    try {
+      await createCircuitTemplate(coachId, c);
+      setSavedCircuitSigs((prev) => new Set(prev).add(JSON.stringify(c)));
+      setLibraryCircuitNames((prev) => [...prev, c.name]);
+      toast.success("Circuito guardado: lo vas a encontrar en Lab → Bloques");
+    } catch {
+      toast.error("No se pudo guardar el circuito");
+    } finally {
+      setSavingCircuit(null);
+    }
+  };
   const openPickerFor = (blockId: string | null) => { setActiveBlockId(blockId); setPickerOpen(true); };
 
   const removeExercise = (exIdx: number) => {
@@ -672,6 +729,89 @@ export function SessionEditor({
   const removeCircuitExercise = (ci: number, i: number) => {
     setCustomCircuits((prev) => prev.map((c, x) => (x === ci ? { ...c, exercises: c.exercises.filter((_, y) => y !== i) } : c)));
   };
+
+  /**
+   * Drag & drop in the left list. Exercises move in display order (blocks A, B, C…); the moved exercise leaves its
+   * superset unless it's dropped between two exercises of the same superset, which it then joins. The arrays are
+   * rewritten in display order so the saved order matches what the coach sees. Circuits reorder among themselves.
+   */
+  const [drag, setDrag] = useState<{ kind: "ex" | "circuit"; idx: number } | null>(null);
+  const [dropAt, setDropAt] = useState<{ kind: "ex" | "circuit"; pos: number } | null>(null);
+  const moveExercise = (from: number, toPos: number) => {
+    const display = groups.flat();
+    const fromPos = display.indexOf(from);
+    if (fromPos < 0) return;
+    const gid = new Map<number, number>();
+    groups.forEach((g, gi) => g.forEach((i) => gid.set(i, gi)));
+    const order = display.filter((i) => i !== from);
+    const insertAt = toPos > fromPos ? toPos - 1 : toPos;
+    if (insertAt === fromPos) return;
+    order.splice(insertAt, 0, from);
+    const before = order[insertAt - 1];
+    const after = order[insertAt + 1];
+    const joins = before !== undefined && after !== undefined && gid.get(before) === gid.get(after);
+    gid.set(from, joins ? gid.get(before)! : -1);
+    const nextGroups: number[][] = [];
+    order.forEach((oldIdx, newIdx) => {
+      const last = nextGroups[nextGroups.length - 1];
+      const prevOld = order[newIdx - 1];
+      if (last && prevOld !== undefined && gid.get(oldIdx) !== -1 && gid.get(oldIdx) === gid.get(prevOld)) last.push(newIdx);
+      else nextGroups.push([newIdx]);
+    });
+    const permute = <T,>(arr: T[]) => order.map((i) => arr[i]!);
+    setExercises(permute);
+    setExStates(permute);
+    setUnits(permute);
+    setExtras(permute);
+    setGroups(nextGroups);
+    setActiveExercise((a) => Math.max(0, order.indexOf(a)));
+  };
+  const moveCircuit = (from: number, toPos: number) => {
+    const insertAt = toPos > from ? toPos - 1 : toPos;
+    if (insertAt === from) return;
+    setCustomCircuits((prev) => {
+      const next = [...prev];
+      const [c] = next.splice(from, 1);
+      next.splice(insertAt, 0, c!);
+      return next;
+    });
+    const refs = circuitRefs.current;
+    const [r] = refs.splice(from, 1);
+    refs.splice(insertAt, 0, r ?? null);
+  };
+  const dragProps = (kind: "ex" | "circuit", idx: number, pos: number) =>
+    ({
+          draggable: true,
+          onDragStart: (e: React.DragEvent) => {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", `${kind}:${idx}`);
+            setDrag({ kind, idx });
+          },
+          onDragOver: (e: React.DragEvent) => {
+            if (!drag || drag.kind !== kind) return;
+            e.preventDefault();
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const p = e.clientY < r.top + r.height / 2 ? pos : pos + 1;
+            if (dropAt?.kind !== kind || dropAt.pos !== p) setDropAt({ kind, pos: p });
+          },
+          onDrop: (e: React.DragEvent) => {
+            e.preventDefault();
+            if (drag && dropAt && drag.kind === kind) {
+              if (kind === "ex") moveExercise(drag.idx, dropAt.pos);
+              else moveCircuit(drag.idx, dropAt.pos);
+            }
+            setDrag(null);
+            setDropAt(null);
+          },
+          onDragEnd: () => {
+            setDrag(null);
+            setDropAt(null);
+          },
+        });
+  const dropLine = (kind: "ex" | "circuit", pos: number, edge: "top" | "bottom") =>
+    dropAt?.kind === kind && dropAt.pos === (edge === "top" ? pos : pos + 1) ? (
+      <span className="pointer-events-none absolute left-1 right-1 h-[2px] rounded-full bg-[#0272B7]" style={{ [edge]: -3 }} />
+    ) : null;
 
   const inputStyle: React.CSSProperties = { backgroundColor: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 6, height: 34, width: "100%", textAlign: "center", fontSize: 14, color: "#0F172A" };
 
@@ -911,7 +1051,35 @@ export function SessionEditor({
     };
   };
 
+  // Unsaved-changes check for jumping to another day: compare against what was loaded.
+  const snapshot = () => JSON.stringify({ n: sessionName, e: buildLoadedExercises(), c: customCircuits });
+  const baseline = useRef<string | null>(null);
+  useEffect(() => {
+    if (!loading && baseline.current === null) baseline.current = snapshot();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
+  /** Opens that day's session (the first strength one) or a new session for that date. */
+  const goToDay = (dateKey: string) => {
+    if (demo || dateKey === realDate) return;
+    const owner = mode === "team" ? { teamId: search.teamId! } : { athleteId: search.athleteId! };
+    const daySessions = weekSessions[dateKey] ?? [];
+    const target = daySessions.find((x) => !x.field);
+    if (!target && daySessions.length > 0) {
+      toast.info("Ese día tiene una sesión de campo: se edita desde el calendario.");
+      return;
+    }
+    if (baseline.current !== null && snapshot() !== baseline.current && !window.confirm("Tenés cambios sin guardar en esta sesión. ¿Querés salir igual?")) return;
+    if (target) navigate({ to: "/sesiones/$sessionId", params: { sessionId: target.id }, search: owner });
+    else navigate({ to: "/sesiones/$sessionId", params: { sessionId: "nueva" }, search: { ...owner, date: dateKey } });
+  };
+
+  // Only Lab sessions need a (unique) name; calendar sessions can go without one.
+  const templateNameTaken = mode === "lab" && isNameTaken(sessionName, otherTemplateNames);
+  const templateNameMissing = mode === "lab" && !sessionName.trim();
+
   const save = async () => {
+    if (templateNameTaken || templateNameMissing) return;
     if (demo || !coachId) return;
     setSaving(true);
     try {
@@ -1031,24 +1199,36 @@ export function SessionEditor({
               value={sessionName}
               onChange={(e) => setSessionName(e.target.value)}
               aria-label="Nombre de la sesión"
+              placeholder={mode === "lab" ? "Nombre de la sesión" : "Sin nombre (opcional)"}
+              aria-invalid={templateNameTaken || templateNameMissing}
               className="truncate text-[13px] font-semibold"
               style={{ color: "#0F172A", border: "none", outline: "none", background: "transparent", minWidth: 160 }}
             />
+            {templateNameTaken ? (
+              <span className="whitespace-nowrap text-[12px] font-medium" style={{ color: "#DC2626" }}>Ese nombre ya está en uso</span>
+            ) : templateNameMissing ? (
+              <span className="whitespace-nowrap text-[12px] font-medium" style={{ color: "#DC2626" }}>Ponele un nombre para guardarla en el Lab</span>
+            ) : null}
             {headerLabel && mode === "program" ? <span className="whitespace-nowrap text-[12px]" style={{ color: "#94A3B8" }}>· {headerLabel}</span> : null}
           </div>
 
           <div className="flex items-center" style={{ gap: 10 }}>
             {mode !== "lab" && !demo ? (
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as DaySession["status"])}
-                aria-label="Estado"
-                style={{ border: "1px solid #E2E8F0", borderRadius: 6, height: 30, padding: "0 8px", fontSize: 12, color: "#374151", backgroundColor: "#FFFFFF" }}
-              >
-                <option value="draft">Borrador</option>
-                <option value="published">Publicada</option>
-                <option value="done">Completada</option>
-              </select>
+              <div className="relative">
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as DaySession["status"])}
+                  aria-label="Estado"
+                  className="appearance-none"
+                  style={{ border: "1px solid #E2E8F0", borderRadius: 6, height: 30, padding: "0 30px 0 10px", fontSize: 12, color: "#374151", backgroundColor: "#FFFFFF", cursor: "pointer" }}
+                >
+                  <option value="draft">Borrador</option>
+                  <option value="published">Publicada</option>
+                  <option value="done">Completada</option>
+                </select>
+                {/* Own chevron with breathing room (the native arrow sits flush against the border) */}
+                <ChevronDown size={14} color="#64748B" className="pointer-events-none absolute right-[10px] top-1/2 -translate-y-1/2" />
+              </div>
             ) : null}
             {mode === "athlete" && !demo ? (
               <button
@@ -1069,7 +1249,8 @@ export function SessionEditor({
             ) : (
               <button
                 type="button"
-                disabled={saving}
+                disabled={saving || templateNameTaken || templateNameMissing}
+                title={templateNameTaken ? NAME_TAKEN_MSG : templateNameMissing ? "Ponele un nombre para guardarla en el Lab" : undefined}
                 onClick={save}
                 className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-white"
                 style={{ backgroundColor: "#111827", borderRadius: 6, padding: "6px 16px", opacity: saving ? 0.6 : 1, cursor: saving ? "not-allowed" : "pointer" }}
@@ -1088,8 +1269,9 @@ export function SessionEditor({
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" style={{ padding: 8, gap: 4 }}>
-              {groups.map((indices) =>
-                indices.map((exIdx) => {
+              {groups.map((indices, gi) =>
+                indices.map((exIdx, posInGroup) => {
+                  const displayPos = groups.slice(0, gi).reduce((acc, g) => acc + g.length, 0) + posInGroup;
                   const ex = exercises[exIdx]!;
                   const st = exStates[exIdx];
                   const active = exIdx === activeExercise;
@@ -1101,10 +1283,13 @@ export function SessionEditor({
                       tabIndex={0}
                       onClick={() => selectExercise(exIdx)}
                       onKeyDown={(e) => { if (e.key === "Enter") selectExercise(exIdx); }}
-                      className="flex cursor-pointer items-center text-left"
-                      style={{ gap: 8, padding: "8px 10px", borderRadius: 6, backgroundColor: active ? "#F1F5F9" : "transparent" }}
+                      {...dragProps("ex", exIdx, displayPos)}
+                      className="relative flex cursor-pointer items-center text-left"
+                      style={{ gap: 8, padding: "8px 10px", borderRadius: 6, backgroundColor: active ? "#F1F5F9" : "transparent", opacity: drag?.kind === "ex" && drag.idx === exIdx ? 0.4 : 1 }}
                     >
-                      <GripVertical size={14} color="#CBD5E1" />
+                      {dropLine("ex", displayPos, "top")}
+                      {displayPos === exercises.length - 1 ? dropLine("ex", displayPos, "bottom") : null}
+                      <span className="cursor-grab active:cursor-grabbing" title="Arrastrá para cambiar el orden"><GripVertical size={14} color="#94A3B8" /></span>
                       <span className="font-mono text-[11px] font-bold" style={{ color: chained ? "#6366F1" : "#94A3B8" }}>{blockLabels[exIdx]}</span>
                       <span className="flex-1 truncate text-[13px]" style={{ color: "#0F172A", fontWeight: active ? 600 : 400 }}>{ex.name}</span>
                       <span className="text-[11px]" style={{ color: "#94A3B8" }}>{st ? `${st.series.length} series` : ""}</span>
@@ -1122,10 +1307,13 @@ export function SessionEditor({
                     key={`nav-${c.name}-${i}`}
                     type="button"
                     onClick={() => circuitRefs.current[i]?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                    className="flex cursor-pointer items-center text-left"
-                    style={{ gap: 8, padding: "8px 10px", borderRadius: 6 }}
+                    {...dragProps("circuit", i, i)}
+                    className="relative flex cursor-pointer items-center text-left"
+                    style={{ gap: 8, padding: "8px 10px", borderRadius: 6, opacity: drag?.kind === "circuit" && drag.idx === i ? 0.4 : 1 }}
                   >
-                    <GripVertical size={14} color="#CBD5E1" />
+                    {dropLine("circuit", i, "top")}
+                    {i === customCircuits.length - 1 ? dropLine("circuit", i, "bottom") : null}
+                    <span className="cursor-grab active:cursor-grabbing" title="Arrastrá para cambiar el orden"><GripVertical size={14} color="#94A3B8" /></span>
                     <span className="font-mono text-[11px] font-bold" style={{ color: "#D97706" }}>C{i + 1}</span>
                     <span className="flex-1 truncate text-[13px]" style={{ color: "#0F172A" }}>{c.name}</span>
                     <span className="text-[11px]" style={{ color: "#94A3B8" }}>{timer || c.type.toUpperCase()}</span>
@@ -1139,7 +1327,7 @@ export function SessionEditor({
                 <button
                   key={label}
                   type="button"
-                  onClick={() => (label === "Agregar ejercicio" ? openPickerFor(null) : (setEditingCircuit(null), setCircuitOpen(true)))}
+                  onClick={() => (label === "Agregar ejercicio" ? openPickerFor(null) : startAddCircuit())}
                   className="inline-flex w-full items-center justify-center gap-1.5 text-[13px] transition-colors hover:bg-[#F8FAFC]"
                   style={{ border: "1px dashed #CBD5E1", backgroundColor: "transparent", color: "#64748B", borderRadius: 6, padding: 8 }}
                 >
@@ -1155,17 +1343,38 @@ export function SessionEditor({
                   {weekDates(realDate).map(({ label, dateKey, dayNum }) => {
                     const st = weekStatus[dateKey];
                     const isCurrent = dateKey === realDate;
-                    const bg = st === "done" ? "#111827" : st === "published" ? "#FFFBEB" : st === "draft" ? "#F8FAFC" : "transparent";
-                    const border = st === "done" ? "1px solid #111827" : st === "published" ? "1px solid #D97706" : st === "draft" ? "1px dashed #CBD5E1" : "1px dashed #E2E8F0";
+                    const daySessions = weekSessions[dateKey] ?? [];
+                    // Cardio-only days are grey (edited from the calendar); strength days are light blue (clickable).
+                    const fieldOnly = daySessions.length > 0 && daySessions.every((x) => x.field);
+                    const bg = !st ? "transparent" : fieldOnly ? "#EEF1F5" : st === "done" ? "#0272B7" : "#E6F2FA";
+                    const border = !st
+                      ? "1px dashed #E2E8F0"
+                      : fieldOnly
+                        ? "1px solid #D5DBE3"
+                        : st === "done"
+                          ? "1px solid #0272B7"
+                          : `1px ${st === "draft" ? "dashed" : "solid"} #8EC3E6`;
+                    const inert = isCurrent || demo || fieldOnly;
                     return (
-                      <div key={dateKey} className="flex flex-col items-center" style={{ gap: 4 }}>
-                        <span className="text-[9px] font-semibold" style={{ color: "#94A3B8" }}>{label}</span>
-                        <span className="text-[11px]" style={{ color: "#64748B" }}>{dayNum}</span>
+                      <button
+                        key={dateKey}
+                        type="button"
+                        onClick={() => goToDay(dateKey)}
+                        aria-current={isCurrent ? "date" : undefined}
+                        title={isCurrent ? "Sesión actual" : fieldOnly ? "Sesión de campo: se edita desde el calendario" : st ? "Abrir la sesión de este día" : "Crear una sesión este día"}
+                        aria-label={`${label} ${dayNum}: ${isCurrent ? "sesión actual" : fieldOnly ? "sesión de campo" : st ? "abrir sesión" : "crear sesión"}`}
+                        className={`group flex flex-col items-center rounded-[6px] transition-colors ${inert ? "cursor-default" : "hover:bg-[#F1F5F9]"}`}
+                        style={{ gap: 4, padding: "2px 0 3px", background: "transparent", border: "none", boxShadow: "none" }}
+                      >
+                        <span className="text-[9px] font-semibold" style={{ color: isCurrent ? "#0F172A" : "#94A3B8" }}>{label}</span>
+                        <span className="text-[11px]" style={{ color: isCurrent ? "#0F172A" : "#64748B", fontWeight: isCurrent ? 700 : 400 }}>{dayNum}</span>
                         <span
-                          title={st ?? "sin sesión"}
+                          className="flex items-center justify-center"
                           style={{ width: "100%", height: 20, borderRadius: 5, backgroundColor: bg, border, outline: isCurrent ? "2px solid #111827" : "none", outlineOffset: -1, color: st === "done" ? "#FFFFFF" : "#64748B" }}
-                        />
-                      </div>
+                        >
+                          {!st && !isCurrent && !demo ? <Plus size={11} className="opacity-0 transition-opacity group-hover:opacity-100" color="#94A3B8" /> : null}
+                        </span>
+                      </button>
                     );
                   })}
                 </div>
@@ -1291,6 +1500,32 @@ export function SessionEditor({
                         style={{ color: "#111827", background: "transparent", border: "1px solid transparent", borderRadius: 6, padding: "2px 6px", outline: "none", minWidth: 0, width: `${Math.max(8, (c.name || "Circuito").length + 1)}ch` }}
                       />
                       <span className="flex-1 truncate text-[12px]" style={{ color: "#94A3B8", whiteSpace: "nowrap" }}>{c.type.toUpperCase()}{timer ? ` · ${timer}` : ""}</span>
+                      {!demo && coachId ? (
+                        savedCircuitSigs.has(JSON.stringify(c)) ? (
+                          <span className="inline-flex shrink-0 items-center gap-1 text-[12px]" style={{ color: "#16A34A" }}>
+                            <Check size={13} /> Guardado en Lab
+                          </span>
+                        ) : isNameTaken(c.name, libraryCircuitNames) ? (
+                          <span
+                            className="shrink-0 cursor-not-allowed text-[12px]"
+                            style={{ color: "#94A3B8" }}
+                            title="Ya tenés un circuito guardado con ese nombre. Cambiale el nombre para guardarlo."
+                          >
+                            Guardar en mis circuitos · nombre en uso
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={savingCircuit === i}
+                            onClick={() => saveCircuitToLibrary(i)}
+                            title="Queda guardado en Lab → Bloques para reusarlo en otras sesiones"
+                            className="shrink-0 cursor-pointer text-[12px] font-medium hover:underline"
+                            style={{ color: "#0272B7", background: "none", border: "none", padding: 0 }}
+                          >
+                            {savingCircuit === i ? "Guardando…" : "Guardar en mis circuitos"}
+                          </button>
+                        )
+                      ) : null}
                       <button type="button" aria-label={`Editar circuito ${c.name}`} onClick={() => { setEditingCircuit(i); setCircuitOpen(true); }} className="cursor-pointer text-[#CBD5E1] transition-colors hover:text-[#111827]"><Settings2 size={16} /></button>
                       <div style={{ position: "relative" }}>
                         <button type="button" aria-label={`Eliminar circuito ${c.name}`} onClick={() => setConfirmDeleteCircuit(i)} className="cursor-pointer text-[#CBD5E1] transition-colors hover:text-[#111827]"><Trash2 size={16} /></button>
@@ -1358,7 +1593,7 @@ export function SessionEditor({
                   <button
                     key={label}
                     type="button"
-                    onClick={() => (label === "Agregar ejercicio" ? openPickerFor(null) : (setEditingCircuit(null), setCircuitOpen(true)))}
+                    onClick={() => (label === "Agregar ejercicio" ? openPickerFor(null) : startAddCircuit())}
                     className="inline-flex w-full items-center justify-center gap-1.5 text-[13px] transition-colors hover:bg-[#F1F5F9]"
                     style={{ border: "1px dashed #CBD5E1", backgroundColor: "transparent", color: "#64748B", borderRadius: 6, padding: 10 }}
                   >
@@ -1470,8 +1705,21 @@ export function SessionEditor({
         onAdd={addExerciseFromLibrary}
         demoLibrary={demo?.library}
       />
+      {circuitPickerOpen && coachId ? (
+        <CircuitPickerModal
+          coachId={coachId}
+          onClose={() => setCircuitPickerOpen(false)}
+          onPick={addExistingCircuit}
+          onCreateNew={() => {
+            setCircuitPickerOpen(false);
+            setEditingCircuit(null);
+            setCircuitOpen(true);
+          }}
+        />
+      ) : null}
       <CircuitModal
         demoLibrary={demo?.library}
+        takenNames={customCircuits.map((c) => c.name)}
         open={circuitOpen}
         mode={editingCircuit === null ? "create" : "edit"}
         initial={editingCircuit === null ? null : (customCircuits[editingCircuit] ?? emptyCircuitConfig())}

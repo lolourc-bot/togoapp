@@ -1,3 +1,4 @@
+import { sessionTitle } from "./session-title";
 import { supabase } from "@/lib/supabase";
 import type { DaySession, CalEx, FieldData } from "@/components/togo/AthleteSessionCard";
 import type { CircuitConfig } from "@/components/togo/CircuitModal";
@@ -163,7 +164,7 @@ export async function fetchRecentTeamActivity(
     const s = sessionMap.get(c.session_id as string);
     return {
       athleteName: s ? memberNames.get(s.athlete_id as string) ?? "Atleta" : "Atleta",
-      sessionName: s?.name ?? "Sesión",
+      sessionName: sessionTitle(s),
       completedAt: c.completed_at as string,
     };
   });
@@ -209,6 +210,37 @@ export async function fetchTeamWeekStatus(teamId: string, anchorDate: string): P
   for (const row of data as { date: string; status: DaySession["status"] }[]) {
     const prev = out[row.date];
     if (!prev || TEAM_RANK[row.status] > TEAM_RANK[prev]) out[row.date] = row.status;
+  }
+  return out;
+}
+
+/** One entry per team session (group) of each day in the Mon–Sun week containing `anchorDate`. */
+export async function fetchTeamWeekSessions(
+  teamId: string,
+  anchorDate: string,
+): Promise<Record<string, { id: string; status: DaySession["status"]; field: boolean }[]>> {
+  const anchor = new Date(`${anchorDate}T00:00:00`);
+  const monday = new Date(anchor);
+  monday.setDate(anchor.getDate() - ((anchor.getDay() + 6) % 7));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const { data, error } = await supabase
+    .from("athlete_sessions")
+    .select("date, status, field, team_session_group_id, created_at")
+    .eq("team_id", teamId)
+    .gte("date", fmt(monday))
+    .lte("date", fmt(sunday))
+    .order("created_at", { ascending: true });
+  if (error || !data) return {};
+  const out: Record<string, { id: string; status: DaySession["status"]; field: boolean }[]> = {};
+  for (const row of data as { date: string; status: DaySession["status"]; field: unknown; team_session_group_id: string | null }[]) {
+    if (!row.team_session_group_id) continue;
+    const day = (out[row.date] ??= []);
+    const existing = day.find((s) => s.id === row.team_session_group_id);
+    if (!existing) day.push({ id: row.team_session_group_id, status: row.status, field: !!row.field });
+    else if (TEAM_RANK[row.status] > TEAM_RANK[existing.status]) existing.status = row.status;
   }
   return out;
 }

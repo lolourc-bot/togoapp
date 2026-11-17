@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { NAME_TAKEN_MSG, isNameTaken, uniqueName } from "@/lib/unique-name";
 import { toast } from "sonner";
 import {
   Clock,
@@ -28,6 +29,14 @@ import {
 } from "@/lib/session-templates";
 
 export type SessionCategory = "Fuerza" | "Cardio" | "Movilidad" | "Circuito";
+
+/** "New" card label for each Lab filter. */
+const NEW_LABEL: Record<string, string> = {
+  Fuerza: "Nueva sesión de fuerza",
+  Cardio: "Nueva sesión de cardio",
+  Movilidad: "Nueva rutina de movilidad",
+  Circuito: "Nuevo circuito",
+};
 
 export type Ex = {
   id: string;
@@ -167,14 +176,29 @@ function SessionBigCard({
   onDelete,
   onDuplicate,
   onEditDetail,
+  takenNames,
 }: {
   session: LabSession;
   onChange: (s: LabSession) => void;
   onDelete: () => void;
   onDuplicate: () => void;
   onEditDetail: () => void;
+  /** Names of the coach's other Lab sessions. */
+  takenNames: string[];
 }) {
   const [editName, setEditName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(session.name);
+  const draftTaken = isNameTaken(nameDraft, takenNames);
+  const commitName = () => {
+    const next = nameDraft.trim();
+    if (!next || draftTaken) {
+      if (draftTaken) toast.error(NAME_TAKEN_MSG);
+      setNameDraft(session.name);
+    } else if (next !== session.name) {
+      onChange({ ...session, name: next });
+    }
+    setEditName(false);
+  };
   const [menu, setMenu] = useState(false);
   const [picker, setPicker] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -268,21 +292,32 @@ function SessionBigCard({
           {session.category}
         </span>
         {editName ? (
-          <input
-            autoFocus
-            value={session.name}
-            onChange={(e) => onChange({ ...session, name: e.target.value })}
-            onBlur={() => setEditName(false)}
-            aria-label="Nombre de la sesión"
-            className="min-w-0 flex-1 bg-transparent text-[15px] font-bold outline-none"
-            style={{ color: "#111827", border: "none", borderBottom: "1.5px solid #111827", paddingBottom: 2 }}
-          />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitName();
+                if (e.key === "Escape") {
+                  setNameDraft(session.name);
+                  setEditName(false);
+                }
+              }}
+              aria-label="Nombre de la sesión"
+              aria-invalid={draftTaken}
+              className="min-w-0 bg-transparent text-[15px] font-bold outline-none"
+              style={{ color: "#111827", border: "none", borderBottom: `1.5px solid ${draftTaken ? "#EF4444" : "#111827"}`, paddingBottom: 2 }}
+            />
+            {draftTaken ? <span className="text-[11px]" style={{ color: "#DC2626", marginTop: 3 }}>Ese nombre ya está en uso</span> : null}
+          </span>
         ) : (
           <h3 className="min-w-0 flex-1 truncate text-[15px] font-bold" style={{ color: "#111827" }}>
             {session.name}
           </h3>
         )}
-        <button type="button" aria-label="Editar nombre" onClick={() => setEditName(true)}>
+        <button type="button" aria-label="Editar nombre" onClick={() => { setNameDraft(session.name); setEditName(true); }}>
           <Pencil size={14} style={{ color: "#CBD5E1" }} />
         </button>
         <div className="relative">
@@ -513,6 +548,7 @@ function SessionBigCard({
         mode={circuitModal?.index === null ? "create" : "edit"}
         initial={circuitModal && circuitModal.index !== null ? session.circuits[circuitModal.index] ?? null : null}
         onClose={() => setCircuitModal(null)}
+        takenNames={session.circuits.map((c) => c.name)}
         onSubmit={(cfg) => {
           const idx = circuitModal?.index ?? null;
           onChange({
@@ -573,7 +609,7 @@ export function LabSessions({
   const duplicate = (s: LabSession) => {
     if (!coachId) return;
     const clone: Omit<LabSession, "id"> = {
-      name: `${s.name} (copia)`,
+      name: uniqueName(`${s.name} (copia)`, sessions.map((x) => x.name)),
       category: s.category,
       minutes: s.minutes,
       exercises: s.exercises.map((e) => ({ ...e, id: nid() })),
@@ -584,9 +620,14 @@ export function LabSessions({
       .catch(() => toast.error("No se pudo duplicar la sesión"));
   };
 
+  // With a category filter on, the new card is born in that category (so it stays visible) and says what it is.
+  const blankCategory: SessionCategory =
+    filter === "Cardio" || filter === "Movilidad" || filter === "Circuito" ? filter : "Fuerza";
+  const blankLabel = NEW_LABEL[filter] ?? "Nueva sesión";
+
   const createBlank = () => {
     if (!coachId) return;
-    const blank: Omit<LabSession, "id"> = { name: "Nueva sesión", category: "Fuerza", minutes: 45, exercises: [], circuits: [] };
+    const blank: Omit<LabSession, "id"> = { name: uniqueName(blankLabel, sessions.map((x) => x.name)), category: blankCategory, minutes: 45, exercises: [], circuits: [] };
     createSessionTemplate(coachId, blank)
       .then((id) => setSessions((prev) => [...prev, { id, ...blank }]))
       .catch(() => toast.error("No se pudo crear la sesión"));
@@ -602,6 +643,7 @@ export function LabSessions({
           onDelete={() => remove(s.id)}
           onDuplicate={() => duplicate(s)}
           onEditDetail={() => onEditDetail(s.id)}
+          takenNames={sessions.filter((x) => x.id !== s.id).map((x) => x.name)}
         />
       ))}
       <button
@@ -611,7 +653,7 @@ export function LabSessions({
         style={{ border: "1.5px dashed #E2E8F0", backgroundColor: "#FFFFFF", minHeight: 180 }}
       >
         <Plus size={20} style={{ color: "#CBD5E1" }} />
-        <span className="text-[13px]" style={{ color: "#94A3B8" }}>Nueva sesión</span>
+        <span className="text-[13px]" style={{ color: "#94A3B8" }}>{blankLabel}</span>
       </button>
     </div>
   );

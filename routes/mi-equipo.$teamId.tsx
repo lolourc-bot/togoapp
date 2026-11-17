@@ -1,3 +1,4 @@
+import { sessionTitle } from "@/lib/session-title";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChevronLeft, MessageCircle } from "lucide-react";
@@ -114,7 +115,7 @@ function TeamDetail() {
             {upcoming.map((s) => (
               <div key={s.date} className="flex" style={{ background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 12, padding: "10px 14px", gap: 12 }}>
                 <span style={{ fontSize: 11, color: "#94A3B8", width: 56, textTransform: "capitalize" }}>{dayLabel(s.date)}</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{s.name}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{sessionTitle(s)}</span>
               </div>
             ))}
           </div>

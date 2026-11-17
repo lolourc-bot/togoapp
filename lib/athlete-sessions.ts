@@ -161,3 +161,29 @@ export async function fetchExerciseHistory(
   }
   return { last, pr };
 }
+
+export type WeekDaySessionRef = { id: string; status: DaySession["status"]; field: boolean };
+
+/** The sessions of each day (Mon–Sun week containing `anchorDate`), so the editor can jump to another day. */
+export async function fetchAthleteWeekSessions(athleteId: string, anchorDate: string): Promise<Record<string, WeekDaySessionRef[]>> {
+  const anchor = new Date(`${anchorDate}T00:00:00`);
+  const monday = new Date(anchor);
+  monday.setDate(anchor.getDate() - ((anchor.getDay() + 6) % 7));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const { data, error } = await supabase
+    .from("athlete_sessions")
+    .select("id, date, status, field, created_at")
+    .eq("athlete_id", athleteId)
+    .gte("date", fmt(monday))
+    .lte("date", fmt(sunday))
+    .order("created_at", { ascending: true });
+  if (error || !data) return {};
+  const out: Record<string, WeekDaySessionRef[]> = {};
+  for (const row of data as { id: string; date: string; status: DaySession["status"]; field: unknown }[]) {
+    (out[row.date] ??= []).push({ id: row.id, status: row.status, field: !!row.field });
+  }
+  return out;
+}

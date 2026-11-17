@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { parsePriceInput } from "@/lib/program-price";
 
 export type Modality = "Online" | "Presencial" | "Ambas";
 export type ProgramLevel = "Principiante" | "Intermedio" | "Avanzado";
@@ -28,7 +29,30 @@ export type MarketplaceProgram = {
   price: string | null;
   paymentType: PaymentType | null;
   visible: boolean;
+  sport?: string | null;
+  coverUrl?: string | null;
+  currency?: string | null;
 };
+
+/** Sports/disciplines a marketplace program can be tagged with (athletes filter by them). */
+export const PROGRAM_SPORTS = [
+  "Fuerza e hipertrofia",
+  "Running",
+  "Ciclismo",
+  "Natación",
+  "Triatlón",
+  "CrossFit / funcional",
+  "Fútbol",
+  "Básquet",
+  "Hockey",
+  "Rugby",
+  "Tenis",
+  "Pádel",
+  "Vóley",
+  "Movilidad",
+  "Pérdida de peso",
+  "Salud y bienestar",
+] as const;
 
 async function loadMarketplaceCoach(coachId: string): Promise<MarketplaceCoach | null> {
   const [{ data: profile }, { data: mp }, { data: countData }] = await Promise.all([
@@ -67,9 +91,7 @@ export async function fetchMyMarketplaceProfile(coachId: string): Promise<Market
 export type PublicCoachSummary = MarketplaceCoach & { minPrice: number | null; programCount: number };
 
 function parsePrice(s: string | null): number | null {
-  if (!s) return null;
-  const n = Number(s.replace(/[^0-9]/g, ""));
-  return Number.isFinite(n) && n > 0 ? n : null;
+  return parsePriceInput(s) || null;
 }
 
 /** Discovery list: every coach who published a visible marketplace profile. */
@@ -118,7 +140,7 @@ export async function fetchPublicCoaches(): Promise<PublicCoachSummary[]> {
 export async function fetchCoachMarketplacePrograms(coachId: string): Promise<MarketplaceProgram[]> {
   const { data, error } = await supabase
     .from("programs")
-    .select("id, name, description, weeks, level, price, payment_type, visible_marketplace")
+    .select("*")
     .eq("coach_id", coachId)
     .eq("visible_marketplace", true)
     .order("created_at", { ascending: true });
@@ -127,6 +149,8 @@ export async function fetchCoachMarketplacePrograms(coachId: string): Promise<Ma
     id: p.id, name: p.name, description: p.description ?? "", weeks: p.weeks,
     level: p.level as ProgramLevel | null, price: p.price, paymentType: p.payment_type as PaymentType | null,
     visible: p.visible_marketplace,
+    sport: (p as { sport?: string | null }).sport ?? null, coverUrl: (p as { cover_url?: string | null }).cover_url ?? null,
+    currency: (p as { currency?: string | null }).currency ?? null,
   }));
 }
 
@@ -159,7 +183,7 @@ export async function upsertCoachMarketplaceProfile(coachId: string, input: Coac
 export async function fetchMyMarketplacePrograms(coachId: string): Promise<MarketplaceProgram[]> {
   const { data, error } = await supabase
     .from("programs")
-    .select("id, name, description, weeks, level, price, payment_type, visible_marketplace")
+    .select("*")
     .eq("coach_id", coachId)
     .order("created_at", { ascending: true });
   if (error || !data) return [];
@@ -167,6 +191,8 @@ export async function fetchMyMarketplacePrograms(coachId: string): Promise<Marke
     id: p.id, name: p.name, description: p.description ?? "", weeks: p.weeks,
     level: p.level as ProgramLevel | null, price: p.price, paymentType: p.payment_type as PaymentType | null,
     visible: p.visible_marketplace,
+    sport: (p as { sport?: string | null }).sport ?? null, coverUrl: (p as { cover_url?: string | null }).cover_url ?? null,
+    currency: (p as { currency?: string | null }).currency ?? null,
   }));
 }
 
@@ -191,7 +217,7 @@ export async function fetchPublicPrograms(): Promise<PublicProgramSummary[]> {
   const coachIds = (mps ?? []).map((m) => m.coach_id as string);
   if (coachIds.length === 0) return [];
   const [{ data: programs }, { data: profiles }] = await Promise.all([
-    supabase.from("programs").select("id, name, description, weeks, level, price, payment_type, visible_marketplace, coach_id")
+    supabase.from("programs").select("*")
       .eq("visible_marketplace", true).in("coach_id", coachIds).order("created_at", { ascending: true }),
     supabase.from("profiles").select("id, full_name").in("id", coachIds),
   ]);
@@ -200,5 +226,71 @@ export async function fetchPublicPrograms(): Promise<PublicProgramSummary[]> {
     id: p.id, name: p.name, description: p.description ?? "", weeks: p.weeks,
     level: p.level as ProgramLevel | null, price: p.price, paymentType: p.payment_type as PaymentType | null,
     visible: p.visible_marketplace, coachId: p.coach_id, coachName: nameById.get(p.coach_id) ?? "Coach",
+    sport: (p as { sport?: string | null }).sport ?? null, coverUrl: (p as { cover_url?: string | null }).cover_url ?? null,
+    currency: (p as { currency?: string | null }).currency ?? null,
   }));
+}
+
+/** What the Lab's "Publicar en marketplace" needs: the program's current listing and whether the coach's profile is public. */
+export async function fetchProgramPublishState(programId: string, coachId: string) {
+  const [{ data: p, error }, { data: mp }] = await Promise.all([
+    supabase.from("programs").select("*").eq("id", programId).maybeSingle(),
+    supabase.from("coach_marketplace_profiles").select("visible").eq("coach_id", coachId).maybeSingle(),
+  ]);
+  if (error) throw error;
+  const row = (p ?? {}) as {
+    name?: string; level?: ProgramLevel | null; price?: string | null; visible_marketplace?: boolean;
+    sport?: string | null; cover_url?: string | null; currency?: string | null;
+  };
+  return {
+    name: row.name ?? "",
+    level: row.level ?? null,
+    price: row.price ?? null,
+    visible: Boolean(row.visible_marketplace),
+    sport: row.sport ?? null,
+    coverUrl: row.cover_url ?? null,
+    currency: row.currency ?? null,
+    profileVisible: Boolean(mp?.visible),
+  };
+}
+
+export type ProgramListing = {
+  name: string;
+  level: ProgramLevel;
+  price: string | null;
+  sport: string | null;
+  coverUrl: string | null;
+  currency: string;
+  visible: boolean;
+};
+
+/**
+ * Saves the marketplace listing from the Lab: name, level, price, sport and cover, and publishes or hides it
+ * (status follows: "Publicado" / "En progreso"). Returns false when the sport/cover/currency columns don't exist yet
+ * (migration 0048 pending): the rest is still saved.
+ */
+export async function saveProgramListing(programId: string, l: ProgramListing): Promise<boolean> {
+  const base = {
+    name: l.name,
+    level: l.level,
+    price: l.price,
+    payment_type: "unico",
+    visible_marketplace: l.visible,
+    status: l.visible ? "Publicado" : "En progreso",
+  };
+  const { error } = await supabase.from("programs").update({ ...base, sport: l.sport, cover_url: l.coverUrl, currency: l.currency }).eq("id", programId);
+  if (!error) return true;
+  const missingColumn = error.code === "PGRST204" || error.code === "42703" || /column/i.test(error.message);
+  if (!missingColumn) throw error;
+  const { error: retry } = await supabase.from("programs").update(base).eq("id", programId);
+  if (retry) throw retry;
+  return false;
+}
+
+/** Makes the coach's marketplace profile public (creating it if needed). */
+export async function publishMyMarketplaceProfile(coachId: string) {
+  const { error } = await supabase
+    .from("coach_marketplace_profiles")
+    .upsert({ coach_id: coachId, visible: true, updated_at: new Date().toISOString() }, { onConflict: "coach_id" });
+  if (error) throw error;
 }

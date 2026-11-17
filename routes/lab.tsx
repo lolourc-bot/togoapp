@@ -1,4 +1,5 @@
 import { NewCoachGate } from "@/components/togo/EmptyStates";
+import { NAME_TAKEN_MSG, isNameTaken } from "@/lib/unique-name";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -23,11 +24,13 @@ import { Sidebar } from "@/components/togo/Sidebar";
 import { LabCanvas, type LabCanvasHandle } from "@/components/togo/LabCanvas";
 import { LabBlocks, type LabBlocksHandle } from "@/components/togo/LabBlocks";
 import { LabSessions } from "@/components/togo/LabSessions";
+import { PublishProgramModal } from "@/components/togo/PublishProgramModal";
 import {
   getCoachId,
   fetchPrograms,
   createProgram,
   archiveProgram,
+  duplicateProgram,
   assignProgramToAthletes,
   fetchAthletesForAssign,
   type ProgramWithCounts,
@@ -57,11 +60,11 @@ export const Route = createFileRoute("/lab")({
   component: () => <NewCoachGate section="lab"><LabPage /></NewCoachGate>,
 });
 
-type ProgramStatus = "En progreso" | "Listo para publicar" | "Archivado";
+type ProgramStatus = "En progreso" | "Publicado" | "Archivado";
 
 const statusChipStyle: Record<ProgramStatus, { backgroundColor: string; color: string }> = {
   "En progreso": { backgroundColor: "#FEF9C3", color: "#854D0E" },
-  "Listo para publicar": { backgroundColor: "#DCFCE7", color: "#166534" },
+  Publicado: { backgroundColor: "#DCFCE7", color: "#166534" },
   Archivado: { backgroundColor: "#F1F5F9", color: "#94A3B8" },
 };
 
@@ -170,6 +173,7 @@ function LabPage() {
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [assignProgram, setAssignProgram] = useState<ProgramWithCounts | null>(null);
+  const [publishProgram, setPublishProgram] = useState<ProgramWithCounts | null>(null);
   const [newProgramOpen, setNewProgramOpen] = useState(false);
 
   const [coachId, setCoachId] = useState<string | null>(null);
@@ -197,7 +201,7 @@ function LabPage() {
       const matchF =
         programFilter === "Todos" ||
         (programFilter === "En progreso" && p.status === "En progreso") ||
-        (programFilter === "Listos para publicar" && p.status === "Listo para publicar") ||
+        (programFilter === "Publicados" && p.status === "Publicado") ||
         (programFilter === "Archivados" && p.status === "Archivado");
       return matchQ && matchF;
     });
@@ -331,7 +335,7 @@ function LabPage() {
               <div className="flex flex-row items-center gap-3" style={{ marginBottom: 20 }}>
                 <SearchInput value={programQuery} onChange={setProgramQuery} placeholder="Buscar programa..." />
                 <FilterChips
-                  options={["Todos", "En progreso", "Listos para publicar", "Archivados"]}
+                  options={["Todos", "En progreso", "Publicados", "Archivados"]}
                   value={programFilter}
                   onChange={setProgramFilter}
                 />
@@ -350,6 +354,17 @@ function LabPage() {
                     onCloseMenu={() => setOpenMenu(null)}
                     onEdit={() => navigate({ to: "/marketplace-coach" })}
                     onAssign={() => setAssignProgram(p)}
+                    onPublish={() => setPublishProgram(p)}
+                    onDuplicate={() => {
+                      if (!coachId) return;
+                      const t = toast.loading("Duplicando programa…");
+                      duplicateProgram(coachId, p.id)
+                        .then(() => {
+                          toast.success("Programa duplicado", { id: t });
+                          reloadPrograms(coachId);
+                        })
+                        .catch(() => toast.error("No se pudo duplicar el programa", { id: t }));
+                    }}
                     onArchive={() => {
                       archiveProgram(p.id)
                         .then(() => { if (coachId) reloadPrograms(coachId); })
@@ -365,7 +380,7 @@ function LabPage() {
           {tab === "Sesiones" ? (
             <>
               <div className="flex flex-row items-center gap-3" style={{ marginBottom: 20 }}>
-                <SearchInput value={sessionQuery} onChange={setSessionQuery} placeholder="Buscar sesión..." />
+                <SearchInput value={sessionQuery} onChange={setSessionQuery} placeholder={sessionFilter === "Circuito" ? "Buscar circuito..." : sessionFilter === "Movilidad" ? "Buscar rutina..." : "Buscar sesión..."} />
                 <FilterChips
                   options={["Todos", "Fuerza", "Cardio", "Movilidad", "Circuito"]}
                   value={sessionFilter}
@@ -385,6 +400,15 @@ function LabPage() {
         </div>
       </main>
 
+      {publishProgram && coachId ? (
+        <PublishProgramModal
+          program={publishProgram}
+          coachId={coachId}
+          onClose={() => setPublishProgram(null)}
+          onSaved={() => reloadPrograms(coachId)}
+          takenNames={programs.filter((p) => p.id !== publishProgram.id).map((p) => p.name)}
+        />
+      ) : null}
       {assignProgram ? (
         <AssignModal
           program={assignProgram}
@@ -405,6 +429,7 @@ function LabPage() {
 
       {newProgramOpen ? (
         <NewProgramModal
+          takenNames={programs.map((p) => p.name)}
           onClose={() => setNewProgramOpen(false)}
           onCreate={(input) => {
             if (!coachId) return;
@@ -424,11 +449,14 @@ function LabPage() {
 function NewProgramModal({
   onClose,
   onCreate,
+  takenNames,
 }: {
   onClose: () => void;
   onCreate: (input: { name: string; description: string; weeks: number }) => void;
+  takenNames: string[];
 }) {
   const [name, setName] = useState("");
+  const nameTaken = isNameTaken(name, takenNames);
   const [description, setDescription] = useState("");
   const [weeks, setWeeks] = useState("8");
 
@@ -459,9 +487,11 @@ function NewProgramModal({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Ej: Fuerza base 12 semanas"
+          aria-invalid={nameTaken}
           className="w-full rounded-[10px] border px-3 text-[13px] outline-none"
-          style={{ height: 40, borderColor: "#E2E8F0", color: "#111827", marginBottom: 16 }}
+          style={{ height: 40, borderColor: nameTaken ? "#EF4444" : "#E2E8F0", color: "#111827", marginBottom: nameTaken ? 6 : 16 }}
         />
+        {nameTaken ? <p className="text-[12px]" style={{ color: "#DC2626", marginBottom: 16 }}>{NAME_TAKEN_MSG}</p> : null}
 
         <label className="block text-[12px] font-medium" style={{ color: "#374151", marginBottom: 6 }}>
           Descripción breve
@@ -493,7 +523,7 @@ function NewProgramModal({
 
         <button
           type="button"
-          disabled={!name.trim()}
+          disabled={!name.trim() || nameTaken}
           onClick={() => onCreate({ name: name.trim(), description: description.trim(), weeks: Math.max(1, Number(weeks) || 1) })}
           className="w-full rounded-[10px] text-[13px] font-semibold disabled:opacity-40"
           style={{ height: 42, backgroundColor: "#111827", color: "#FFFFFF" }}
@@ -513,6 +543,8 @@ function ProgramCard({
   onCloseMenu,
   onEdit,
   onAssign,
+  onPublish,
+  onDuplicate,
   onArchive,
 }: {
   program: ProgramWithCounts;
@@ -521,6 +553,8 @@ function ProgramCard({
   onCloseMenu: () => void;
   onEdit: () => void;
   onAssign: () => void;
+  onPublish: () => void;
+  onDuplicate: () => void;
   onArchive: () => void;
 }) {
   const [hover, setHover] = useState(false);
@@ -530,18 +564,28 @@ function ProgramCard({
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      className="flex cursor-pointer flex-col rounded-[14px] bg-white p-5"
+      className="flex cursor-pointer flex-col overflow-hidden rounded-[14px] bg-white p-5"
       style={{
         border: `1px solid ${hover ? "#CBD5E1" : "#E2E8F0"}`,
         boxShadow: hover ? "0 4px 16px rgba(0,0,0,0.07)" : "none",
       }}
     >
+      {program.coverUrl ? (
+        <img src={program.coverUrl} alt="" className="-mx-5 -mt-5 mb-4 h-[120px] max-w-none object-cover" style={{ width: "calc(100% + 40px)" }} />
+      ) : null}
       <div className="flex flex-row items-start justify-between" style={{ marginBottom: 12 }}>
-        <span
-          className="rounded-[6px] text-[11px] font-medium"
-          style={{ ...chip, padding: "3px 8px" }}
-        >
-          {program.status}
+        <span className="flex items-center gap-1.5">
+          <span
+            className="rounded-[6px] text-[11px] font-medium"
+            style={{ ...chip, padding: "3px 8px" }}
+          >
+            {program.status}
+          </span>
+          {program.sport ? (
+            <span className="rounded-[6px] text-[11px] font-medium" style={{ backgroundColor: "#F8FAFC", color: "#64748B", padding: "3px 8px", border: "1px solid #E2E8F0" }}>
+              {program.sport}
+            </span>
+          ) : null}
         </span>
 
         <div className="relative">
@@ -570,6 +614,8 @@ function ProgramCard({
                     onClick={() => {
                       onCloseMenu();
                       if (label === "Editar") onEdit();
+                      if (label === "Publicar en marketplace") onPublish();
+                      if (label === "Duplicar") onDuplicate();
                       if (label === "Asignar a atleta") onAssign();
                       if (label === "Archivar") onArchive();
                     }}
@@ -577,7 +623,7 @@ function ProgramCard({
                     style={{ padding: "8px 12px", color: "#374151" }}
                   >
                     <Icon size={12} style={{ color: "#94A3B8" }} />
-                    {label}
+                    {label === "Publicar en marketplace" && program.status === "Publicado" ? "Editar publicación" : label}
                   </button>
                 ))}
               </div>
@@ -624,9 +670,10 @@ function ProgramCard({
           Editar
         </button>
 
-        {program.status === "Listo para publicar" ? (
+        {program.status === "En progreso" ? (
           <button
             type="button"
+            onClick={onPublish}
             className="flex flex-1 items-center justify-center rounded-[8px] text-[12px] font-medium"
             style={{ height: 34, backgroundColor: "#111827", color: "#FFFFFF" }}
           >

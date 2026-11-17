@@ -711,6 +711,7 @@ function LibraryScreen() {
       </main>
 
       <NewExerciseModal
+        takenNames={[...ownVideos.map((v) => coachToItem(v, true).name), ...togoVideos.map((v) => togoToItem(v).name)]}
         open={modalOpen || editing !== null}
         initial={editingInitial}
         onClose={() => {

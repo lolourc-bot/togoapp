@@ -1,6 +1,7 @@
+import { uniqueName } from "@/lib/unique-name";
 import { supabase } from "@/lib/supabase";
 
-export type ProgramStatus = "En progreso" | "Listo para publicar" | "Archivado";
+export type ProgramStatus = "En progreso" | "Publicado" | "Archivado";
 
 export type ProgramWithCounts = {
   id: string;
@@ -10,6 +11,8 @@ export type ProgramWithCounts = {
   status: ProgramStatus;
   athletes: number;
   sessions: number;
+  coverUrl: string | null;
+  sport: string | null;
 };
 
 export async function getCoachId(): Promise<string | null> {
@@ -20,7 +23,8 @@ export async function getCoachId(): Promise<string | null> {
 export async function fetchPrograms(coachId: string): Promise<ProgramWithCounts[]> {
   const { data: rows, error } = await supabase
     .from("programs")
-    .select("id, name, description, weeks, status")
+    // "*" so newer optional columns (sport, cover_url) don't break the list if a migration is still pending.
+    .select("*")
     .eq("coach_id", coachId)
     .order("created_at", { ascending: false });
   if (error || !rows) return [];
@@ -40,9 +44,12 @@ export async function fetchPrograms(coachId: string): Promise<ProgramWithCounts[
     name: r.name,
     description: r.description ?? "",
     weeks: r.weeks ?? 0,
-    status: (r.status as ProgramStatus) ?? "En progreso",
+    // A program listed in the marketplace is "Publicado" (older rows only have the visibility flag).
+    status: r.status === "Archivado" ? "Archivado" : r.visible_marketplace || r.status === "Publicado" ? "Publicado" : "En progreso",
     athletes: counts[r.id] ?? 0,
     sessions: 0,
+    coverUrl: (r as { cover_url?: string | null }).cover_url ?? null,
+    sport: (r as { sport?: string | null }).sport ?? null,
   }));
 }
 
@@ -57,8 +64,38 @@ export async function createProgram(coachId: string, input: { name: string; desc
 }
 
 export async function archiveProgram(id: string) {
-  const { error } = await supabase.from("programs").update({ status: "Archivado" }).eq("id", id);
+  // Archiving also takes it off the marketplace.
+  const { error } = await supabase.from("programs").update({ status: "Archivado", visible_marketplace: false }).eq("id", id);
   if (error) throw error;
+}
+
+/** Copies a program (its data and every session in its weeks) as a new, unpublished "(copia)". */
+export async function duplicateProgram(coachId: string, programId: string): Promise<string> {
+  const { data: src, error } = await supabase.from("programs").select("*").eq("id", programId).single();
+  if (error || !src) throw error ?? new Error("Programa no encontrado");
+  const { id: _id, created_at: _c, ...rest } = src as Record<string, unknown>;
+  const { data: existing } = await supabase.from("programs").select("name").eq("coach_id", coachId);
+  const { data: created, error: insErr } = await supabase
+    .from("programs")
+    .insert({ ...rest, coach_id: coachId, name: uniqueName(`${src.name} (copia)`, (existing ?? []).map((r) => r.name as string)), status: "En progreso", visible_marketplace: false })
+    .select("id")
+    .single();
+  if (insErr || !created) throw insErr;
+  const newId = created.id as string;
+  const { data: sessions, error: sErr } = await supabase.from("program_sessions").select("*").eq("program_id", programId);
+  if (sErr) throw sErr;
+  if (sessions && sessions.length) {
+    const rows = sessions.map((row) => {
+      const { id: _sid, created_at: _sc, ...r } = row as Record<string, unknown>;
+      return { ...r, program_id: newId, coach_id: coachId };
+    });
+    const { error: cpErr } = await supabase.from("program_sessions").insert(rows);
+    if (cpErr) {
+      await supabase.from("programs").delete().eq("id", newId);
+      throw cpErr;
+    }
+  }
+  return newId;
 }
 
 export async function assignProgramToAthletes(coachId: string, programId: string, athleteIds: string[], startDate: string) {

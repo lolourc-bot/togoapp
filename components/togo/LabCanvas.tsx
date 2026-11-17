@@ -1,4 +1,6 @@
+import { sessionTitle } from "@/lib/session-title";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { NAME_TAKEN_MSG, isNameTaken, uniqueName } from "@/lib/unique-name";
 import { toast } from "sonner";
 import {
   Plus,
@@ -119,6 +121,7 @@ export const LabCanvas = forwardRef<
   const coachId = demo ? "demo" : coachIdProp;
   const api = demo ? DEMO_API : REAL_API;
   const [canvases, setCanvases] = useState<CanvasDoc[]>(demoCanvases ?? []);
+  const renameOriginal = useRef<string | null>(null);
   const [activeId, setActiveId] = useState<string>(demoCanvases?.[0]?.id ?? "");
   const [loaded, setLoaded] = useState(demo);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -511,7 +514,7 @@ export const LabCanvas = forwardRef<
             className="min-w-0 flex-1 truncate text-[11px] font-bold"
             style={{ color: "#111827" }}
           >
-            {session.name}
+            {sessionTitle(session)}
           </span>
           <button
             type="button"
@@ -710,9 +713,19 @@ export const LabCanvas = forwardRef<
                       prev.map((x) => (x.id === c.id ? { ...x, name: e.target.value } : x)),
                     )
                   }
+                  onFocus={() => { renameOriginal.current = c.name; }}
+                  aria-invalid={isNameTaken(c.name, canvases.filter((x) => x.id !== c.id).map((x) => x.name))}
                   onBlur={() => {
                     setRenaming(null);
-                    api.renameProgramCanvas(c.id, c.name).catch(() => toast.error("No se pudo renombrar el programa"));
+                    const original = renameOriginal.current ?? c.name;
+                    const others = canvases.filter((x) => x.id !== c.id).map((x) => x.name);
+                    // Empty or repeated names don't stick: back to the previous name.
+                    if (!c.name.trim() || isNameTaken(c.name, others)) {
+                      if (c.name.trim()) toast.error(NAME_TAKEN_MSG);
+                      setCanvases((prev) => prev.map((x) => (x.id === c.id ? { ...x, name: original } : x)));
+                      return;
+                    }
+                    api.renameProgramCanvas(c.id, c.name.trim()).catch(() => toast.error("No se pudo renombrar el programa"));
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -721,7 +734,8 @@ export const LabCanvas = forwardRef<
                     }
                   }}
                   className="bg-transparent text-[13px] font-medium outline-none"
-                  style={{ color: "#111827", border: "none", borderBottom: "1px solid #111827", width: 90 }}
+                  style={{ color: "#111827", border: "none", borderBottom: `1px solid ${isNameTaken(c.name, canvases.filter((x) => x.id !== c.id).map((x) => x.name)) ? "#EF4444" : "#111827"}`, width: 90 }}
+                  title={isNameTaken(c.name, canvases.filter((x) => x.id !== c.id).map((x) => x.name)) ? "Ese nombre ya está en uso" : undefined}
                 />
               ) : (
                 <span
@@ -779,7 +793,7 @@ export const LabCanvas = forwardRef<
           aria-label="Nuevo lienzo"
           onClick={() => {
             if (!coachId) return;
-            const name = `Programa ${canvases.length + 1}`;
+            const name = uniqueName(`Programa ${canvases.length + 1}`, canvases.map((x) => x.name));
             api.createProgramCanvas(coachId, name)
               .then((id) => {
                 const c: CanvasDoc = { id, name, weeks: 2, sessions: {} };

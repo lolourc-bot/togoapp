@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { ImagePlus, Link as LinkIcon, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { NAME_TAKEN_MSG, isNameTaken } from "@/lib/unique-name";
+import { Link as LinkIcon, X } from "lucide-react";
 import { VideoField } from "./VideoField";
 import { MOVEMENT_PATTERNS, EQUIPMENT_OPTIONS, LATERALITY_OPTIONS } from "@/lib/exercise-data";
 
@@ -80,11 +81,14 @@ export function NewExerciseModal({
   onClose,
   onSave,
   initial,
+  takenNames = [],
 }: {
   open: boolean;
   onClose: () => void;
   onSave: (exercise: NewExerciseInput) => void;
   initial?: NewExerciseInitial | null;
+  /** Exercise names already in the library (TOGO's and the coach's): a new one can't repeat them. */
+  takenNames?: string[];
 }) {
   const [name, setName] = useState("");
   const [pattern, setPattern] = useState("");
@@ -92,8 +96,6 @@ export function NewExerciseModal({
   const [laterality, setLaterality] = useState("Bilateral");
   const [description, setDescription] = useState("");
   const [video, setVideo] = useState("");
-  const [image, setImage] = useState<{ url: string; fileName: string } | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -103,12 +105,13 @@ export function NewExerciseModal({
     setLaterality(initial?.laterality || "Bilateral");
     setDescription(initial?.description ?? "");
     setVideo(initial?.videoUrl ?? "");
-    setImage(initial?.imageUrl ? { url: initial.imageUrl, fileName: "imagen" } : null);
   }, [open, initial]);
 
   if (!open) return null;
 
-  const valid = name.trim().length > 0 && pattern.length > 0;
+  // Editing an exercise may keep its own name.
+  const nameTaken = isNameTaken(name, takenNames, initial?.name ?? null);
+  const valid = name.trim().length > 0 && pattern.length > 0 && !nameTaken;
 
   const reset = () => {
     setName("");
@@ -117,7 +120,6 @@ export function NewExerciseModal({
     setLaterality("Bilateral");
     setDescription("");
     setVideo("");
-    setImage(null);
   };
 
   const handleSave = () => {
@@ -184,8 +186,10 @@ export function NewExerciseModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ej. Sentadilla búlgara con mancuernas"
-              style={inputStyle}
+              aria-invalid={nameTaken}
+              style={{ ...inputStyle, ...(nameTaken ? { borderColor: "#EF4444" } : {}) }}
             />
+            {nameTaken ? <span style={{ fontSize: 12, color: "#DC2626" }}>{NAME_TAKEN_MSG}</span> : null}
           </div>
 
           {/* PATRÓN + EQUIPAMIENTO */}
@@ -288,64 +292,6 @@ export function NewExerciseModal({
               />
             </div>
             </VideoField>
-          </div>
-
-          {/* IMAGEN */}
-          <div className="flex flex-col" style={{ gap: 6 }}>
-            <span style={labelStyle}>Imagen de referencia</span>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg"
-              aria-label="Subir imagen"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) setImage({ url: URL.createObjectURL(f), fileName: f.name });
-              }}
-            />
-            {image ? (
-              <div className="flex items-center" style={{ gap: 12 }}>
-                <img
-                  src={image.url}
-                  alt="Referencia del ejercicio"
-                  style={{ width: 80, height: 80, borderRadius: 8, objectFit: "cover" }}
-                />
-                <span style={{ fontSize: 13, color: "#374151" }}>{image.fileName}</span>
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  style={{
-                    fontSize: 12,
-                    color: "#111827",
-                    textDecoration: "underline",
-                    cursor: "pointer",
-                    background: "none",
-                    border: "none",
-                  }}
-                >
-                  Cambiar
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="togo-upload-zone flex flex-col items-center justify-center"
-                style={{
-                  gap: 6,
-                  border: "1.5px dashed #E2E8F0",
-                  borderRadius: 10,
-                  padding: 18,
-                  backgroundColor: "#FAFAFA",
-                  cursor: "pointer",
-                }}
-              >
-                <ImagePlus size={20} color="#CBD5E1" />
-                <span style={{ fontSize: 13, color: "#94A3B8" }}>Subir imagen</span>
-                <span style={{ fontSize: 11, color: "#CBD5E1" }}>JPG o PNG · Máx. 5MB</span>
-              </button>
-            )}
           </div>
 
         </div>

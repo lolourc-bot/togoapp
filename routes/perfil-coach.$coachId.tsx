@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { formatProgramPrice, parsePriceInput } from "@/lib/program-price";
 import { useEffect, useState } from "react";
-import { Camera, CheckCircle, ChevronLeft, Share2, MapPin, MessageCircle, Pencil, X } from "lucide-react";
+import { Camera, CheckCircle, ChevronLeft, Eye, Share2, MapPin, MessageCircle, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { PhoneFrame } from "@/components/togo/Entrenamiento";
@@ -38,6 +39,8 @@ export const Route = createFileRoute("/perfil-coach/$coachId")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
+  // ?vista=atleta: the owner sees their profile exactly as athletes do.
+  validateSearch: (s: Record<string, unknown>): { vista?: "atleta" } => (s["vista"] === "atleta" ? { vista: "atleta" } : {}),
   component: CoachProfile,
 });
 
@@ -213,7 +216,7 @@ function EditProgramRow({ program, onSaved }: { program: MarketplaceProgram; onS
         </div>
       ) : (
         <>
-          <div style={{ fontSize: 13, fontWeight: 800, color: "#111827", marginTop: 8 }}>{program.price || "Sin precio"}</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#111827", marginTop: 8 }}>{formatProgramPrice(program.price, program.currency)}</div>
           <button type="button" onClick={() => setEditing(true)} style={{ fontSize: 11, color: "#3B82F6", marginTop: 4, background: "none", border: "none", cursor: "pointer", padding: 0 }}>Editar</button>
         </>
       )}
@@ -223,6 +226,8 @@ function EditProgramRow({ program, onSaved }: { program: MarketplaceProgram; onS
 
 function CoachProfile() {
   const { coachId } = Route.useParams();
+  const search = Route.useSearch();
+  const [preview, setPreview] = useState(search.vista === "atleta");
   const [loading, setLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
   const [profile, setProfile] = useState<MarketplaceCoach | null>(null);
@@ -266,7 +271,7 @@ function CoachProfile() {
       : <PhoneFrame><div className="flex flex-1" /></PhoneFrame>;
   }
 
-  if (isOwner) {
+  if (isOwner && !preview) {
     const c: MarketplaceCoach = profile ?? {
       coachId, name: "Vos", photoUrl: null, bio: "", specialty: "", modality: null, modalityText: "",
       yearsExperience: null, chips: [], availableDays: Array(7).fill(false), athleteCount: 0, visible: false,
@@ -289,6 +294,7 @@ function CoachProfile() {
                 </div>
               </div>
               <div className="flex items-center" style={{ gap: 8 }}>
+                <button onClick={() => setPreview(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-border"><Eye size={14} /> Ver como atleta</button>
                 <button onClick={share} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-border"><Share2 size={14} /> Compartir</button>
                 <button onClick={() => setEditingProfile(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: "#111827" }}><Pencil size={14} /> Editar perfil</button>
               </div>
@@ -390,9 +396,10 @@ function CoachProfile() {
     yearsExperience: null, chips: [], availableDays: Array(7).fill(false), athleteCount: 0, visible: false,
   };
   const initials = c.name.split(" ").map((p) => p[0]).join("");
-  const visiblePrograms = programs;
+  // In the owner's preview, only what athletes would actually see.
+  const visiblePrograms = isOwner ? programs.filter((p) => p.visible) : programs;
   const selectedProgram = visiblePrograms[sel];
-  const selectedPriceNum = selectedProgram?.price ? Number(String(selectedProgram.price).replace(/[^0-9]/g, "")) : 0;
+  const selectedPriceNum = parsePriceInput(selectedProgram?.price);
   const isPaidProgram = selectedProgram?.paymentType === "unico" && selectedPriceNum > 0;
 
   const buyNow = async () => {
@@ -416,7 +423,21 @@ function CoachProfile() {
     }
   };
 
+  const previewBar = isOwner ? (
+    <div className="fixed left-1/2 top-3 z-[100] flex -translate-x-1/2 items-center gap-3 rounded-full border border-[#E2E8F0] bg-white py-1.5 pl-4 pr-1.5 text-[13px] shadow-[0_8px_24px_rgba(1,23,38,0.12)]">
+      <Eye size={14} color="#0272B7" />
+      <span style={{ color: "#374151" }}>
+        Vista previa: así te ven los atletas{profile?.visible ? "" : " (tu perfil todavía no está publicado)"}
+      </span>
+      <button onClick={() => setPreview(false)} className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-white" style={{ backgroundColor: "#111827" }}>
+        Volver a editar
+      </button>
+    </div>
+  ) : null;
+
   return (
+    <>
+    {previewBar}
     <PhoneFrame>
       <div className="flex flex-1 flex-col overflow-y-auto" style={{ paddingBottom: 80 }}>
         <div className="flex items-center" style={{ position: "sticky", top: 0, background: "#FFF", borderBottom: "1px solid #E2E8F0", padding: "12px 16px", zIndex: 10, gap: 12 }}>
@@ -483,16 +504,17 @@ function CoachProfile() {
             </p>
           ) : (
             <div className="flex" style={{ gap: 10, overflowX: "auto", paddingBottom: 4 }}>
-              {isOwner
+              {isOwner && !preview
                 ? visiblePrograms.map((p) => (
                     <EditProgramRow key={p.id} program={p} onSaved={(updated) => setPrograms((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))} />
                   ))
                 : visiblePrograms.map((p, i) => (
-                    <div key={p.id} className="flex flex-col" style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", padding: 14, width: 200, flexShrink: 0, gap: 6 }}>
+                    <div key={p.id} className="flex flex-col overflow-hidden" style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", padding: 14, width: 200, flexShrink: 0, gap: 6 }}>
+                      {p.coverUrl ? <img src={p.coverUrl} alt="" style={{ margin: "-14px -14px 4px", width: "calc(100% + 28px)", maxWidth: "none", height: 96, objectFit: "cover" }} /> : null}
                       <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{p.name}</div>
-                      <div style={{ fontSize: 11, color: "#94A3B8" }}>{p.weeks ? `${p.weeks} semanas` : ""}</div>
+                      <div style={{ fontSize: 11, color: "#94A3B8" }}>{[p.sport, p.weeks ? `${p.weeks} semanas` : ""].filter(Boolean).join(" · ")}</div>
                       {p.level ? <span style={{ alignSelf: "flex-start", fontSize: 10, borderRadius: 20, padding: "2px 8px", background: LEVEL[p.level][0], color: LEVEL[p.level][1] }}>{p.level}</span> : null}
-                      <div style={{ fontSize: 14, fontWeight: 800, color: "#111827", marginTop: 4 }}>{p.price || "Consultar precio"}</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: "#111827", marginTop: 4 }}>{formatProgramPrice(p.price, p.currency, "Consultar precio")}</div>
                       <button onClick={() => { setSel(i); setSheet(true); }} style={{ fontSize: 11, color: "#3B82F6", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Ver programa</button>
                     </div>
                   ))}
@@ -552,7 +574,7 @@ function CoachProfile() {
                       <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#111827" }}>{p.name}</span>
                       <span style={{ display: "block", fontSize: 11, color: "#94A3B8" }}>{p.weeks ? `${p.weeks} semanas` : ""}</span>
                     </span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{p.price || "Consultar"}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{formatProgramPrice(p.price, p.currency, "Consultar")}</span>
                   </button>
                 ))}
               </div>
@@ -563,7 +585,7 @@ function CoachProfile() {
                 onClick={buyNow}
                 style={{ width: "100%", background: isPaidProgram ? "#111827" : "#CBD5E1", color: "#FFF", borderRadius: 12, height: 50, fontSize: 15, fontWeight: 700, border: "none", cursor: isPaidProgram ? "pointer" : "default", opacity: sending ? 0.7 : 1 }}
               >
-                {sending ? "Un momento…" : isPaidProgram ? `Comprar · ${selectedProgram?.price}` : "Precio no definido"}
+                {sending ? "Un momento…" : isPaidProgram ? `Comprar · ${formatProgramPrice(selectedProgram?.price, selectedProgram?.currency)}` : "Precio no definido"}
               </button>
               <div style={{ fontSize: 11, color: "#94A3B8", textAlign: "center", marginTop: 8 }}>Pagás ahora y el programa te aparece en tu calendario al toque, sin esperar a que el coach confirme.</div>
             </div>
@@ -575,5 +597,6 @@ function CoachProfile() {
         <EditProfileModal coachId={coachId} initial={profile} onClose={() => setEditingProfile(false)} onSaved={load} />
       ) : null}
     </PhoneFrame>
+    </>
   );
 }

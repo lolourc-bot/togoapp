@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { maskMinSec } from "@/lib/time-mask";
 import {
   Activity,
   ArrowDown,
@@ -452,7 +453,7 @@ export function AerobicEditor({
                   {(() => {
                     const et = b.etype ?? "Continuo";
                     const inp = (v: string | undefined, k: keyof EffortExtra, ph: string, w: number | string = "100%") => (
-                      <input value={v ?? ""} onChange={(e) => updBlock(b.id, { [k]: e.target.value } as Partial<Block>)} placeholder={ph} style={{ ...small, height: 36, fontSize: 13, textAlign: "left", padding: "0 10px", width: w }} />
+                      <input value={v ?? ""} onChange={(e) => updBlock(b.id, { [k]: ph === "0:00" ? maskMinSec(e.target.value, v ?? "") : e.target.value } as Partial<Block>)} inputMode={ph === "0:00" ? "numeric" : undefined} placeholder={ph} style={{ ...small, height: 36, fontSize: 13, textAlign: "left", padding: "0 10px", width: w }} />
                     );
                     const lbl = (t: string) => <span style={{ fontSize: 11, color: "#94A3B8", flexShrink: 0 }}>{t}</span>;
                     const area = (ph: string) => (
@@ -487,7 +488,7 @@ export function AerobicEditor({
                           {durDist}
                           <div className="flex items-center" style={{ gap: 6, marginTop: 10, padding: 8, borderRadius: 8, background: "linear-gradient(90deg, #F1F5F9, #CBD5E1)" }}>
                             {lbl("Ritmo inicio:")}
-                            <input value={b.pace} onChange={(e) => updBlock(b.id, { pace: e.target.value })} placeholder="0:00" style={{ ...small, height: 32, width: 70 }} />
+                            <input value={b.pace} onChange={(e) => updBlock(b.id, { pace: maskMinSec(e.target.value, b.pace) })} inputMode="numeric" placeholder="0:00" style={{ ...small, height: 32, width: 70 }} />
                             <span style={unitTxt}>{u.pace}</span>
                             <span style={{ color: "#64748B" }}>→</span>
                             {lbl("Ritmo final:")}
@@ -654,7 +655,7 @@ export function AerobicEditor({
             {idx === 1 && <div className="flex justify-center" style={{ marginBottom: 14 }}><ArrowDown size={14} color="#CBD5E1" /></div>}
             <div className="flex items-center" style={{ gap: 12 }}>
               <span style={{ fontSize: 12, color: "#94A3B8", width: 44 }}>{k === "start" ? "Inicio:" : "Final:"}</span>
-              <input value={P[k]} onChange={(e) => setP({ [k]: e.target.value })} placeholder="0:00" style={{ ...small, width: 80 }} />
+              <input value={P[k]} onChange={(e) => setP({ [k]: maskMinSec(e.target.value, P[k]) })} inputMode="numeric" placeholder="0:00" style={{ ...small, width: 80 }} />
               <span style={unitTxt}>{u.pace}</span>
               <span style={{ color: "#CBD5E1" }}>·</span>
               {rpeChips(k === "start" ? P.startRpe : P.endRpe, (v) => setP(k === "start" ? { startRpe: v } : { endRpe: v }))}
@@ -677,7 +678,7 @@ export function AerobicEditor({
                   <span style={unitTxt}>a</span>
                   <input value={t.to} onChange={(e) => upd({ to: e.target.value })} placeholder="0" style={{ ...small, width: 48 }} />
                   <span style={unitTxt}>{u.dist}/min</span>
-                  <input value={t.pace} onChange={(e) => upd({ pace: e.target.value })} placeholder="0:00" style={{ ...small, width: 64 }} />
+                  <input value={t.pace} onChange={(e) => upd({ pace: maskMinSec(e.target.value, t.pace) })} inputMode="numeric" placeholder="0:00" style={{ ...small, width: 64 }} />
                   <span style={unitTxt}>{u.pace}</span>
                   {rpeChips(t.rpe, (v) => upd({ rpe: v }))}
                   <TrashBtn onClick={() => setP({ tramos: P.tramos.filter((_, j) => j !== i) })} />
@@ -703,7 +704,7 @@ export function AerobicEditor({
         <span style={unitTxt}>~</span>
         <input value={F[`${m}Min`]} onChange={(e) => setF({ [`${m}Min`]: e.target.value })} inputMode="decimal" style={{ ...small, width: 52 }} />
         <span style={unitTxt}>min</span>
-        <input value={F[`${m}Pace`]} onChange={(e) => setF({ [`${m}Pace`]: e.target.value })} placeholder="0:00" style={{ ...small, width: 60 }} />
+        <input value={F[`${m}Pace`]} onChange={(e) => setF({ [`${m}Pace`]: maskMinSec(e.target.value, F[`${m}Pace`]) })} inputMode="numeric" placeholder="0:00" style={{ ...small, width: 60 }} />
         <span style={unitTxt}>{u.pace}</span>
       </div>
       <div className="flex items-center" style={{ gap: 6 }}>
@@ -797,7 +798,7 @@ export function AerobicEditor({
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Nombre de la sesión…"
+              placeholder="Nombre (opcional)"
               aria-label="Nombre de la sesión"
               className="placeholder:text-[rgba(255,255,255,0.4)]"
               style={{ flex: 1, minWidth: 0, border: "none", backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 8, color: "#FFFFFF", fontSize: 16, fontWeight: 700, padding: "6px 12px", outline: "none" }}

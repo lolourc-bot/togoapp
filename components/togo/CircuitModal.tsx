@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { NAME_TAKEN_MSG, isNameTaken } from "@/lib/unique-name";
 import { Check, GripVertical, Link, Play, Trash2 } from "lucide-react";
 import { fetchLibraryExercises, type LibraryExercise } from "@/lib/exercise-data";
 import { getCoachId } from "@/lib/programs";
@@ -238,6 +239,7 @@ export function CircuitModal({
   initial,
   mode = "create",
   demoLibrary,
+  takenNames = [],
 }: {
   open: boolean;
   onClose: () => void;
@@ -246,8 +248,11 @@ export function CircuitModal({
   mode?: "create" | "edit";
   /** Landing demo: search this library instead of loading the coach's. */
   demoLibrary?: LibraryExercise[] | undefined;
+  /** Names already used by other circuits: saving with one of them is blocked. */
+  takenNames?: string[];
 }) {
   const [cfg, setCfg] = useState<CircuitConfig>(initial ?? emptyCircuitConfig());
+  const nameTaken = isNameTaken(cfg.name.trim() || "Circuito", takenNames, mode === "edit" ? initial?.name : null);
   const [videoOpen, setVideoOpen] = useState<number | null>(null);
   const [videoDraft, setVideoDraft] = useState("");
   const [searchOpen, setSearchOpen] = useState<number | null>(null);
@@ -608,6 +613,7 @@ export function CircuitModal({
             onChange={(e) => set("name", e.target.value)}
             placeholder="Ej: Circuito metabólico A"
             aria-label="Nombre del circuito"
+            aria-invalid={nameTaken}
             style={{
               ...textInput,
               width: "100%",
@@ -615,8 +621,10 @@ export function CircuitModal({
               borderRadius: 10,
               padding: "0 14px",
               color: "#111827",
+              ...(nameTaken ? { borderColor: "#EF4444" } : {}),
             }}
           />
+          {nameTaken ? <p style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>{NAME_TAKEN_MSG}</p> : null}
         </div>
 
         <div style={{ marginBottom: 20 }}>
@@ -797,7 +805,10 @@ export function CircuitModal({
           </button>
           <button
             type="button"
+            disabled={nameTaken}
+            title={nameTaken ? NAME_TAKEN_MSG : undefined}
             onClick={() =>
+              !nameTaken &&
               onSubmit({
                 ...cfg,
                 name: cfg.name.trim() || "Circuito",
@@ -812,7 +823,7 @@ export function CircuitModal({
               padding: "8px 20px",
               fontSize: 13,
               fontWeight: 500,
-              cursor: "pointer",
+              cursor: nameTaken ? "not-allowed" : "pointer",
             }}
           >
             {mode === "edit" ? "Guardar cambios" : "Crear circuito"}

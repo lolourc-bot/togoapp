@@ -48,12 +48,15 @@ function sampleAthlete() {
   const monday = new Date(today);
   monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
   const weekStatus: Record<string, "draft" | "published" | "done"> = {};
-  const plan: Record<number, "draft" | "published" | "done"> = { 0: "done", 1: "done", 3: "published", 4: "published", 5: "draft" };
+  const fieldDays: string[] = [];
+  // Wednesday is a run (field session), the rest are strength days.
+  const plan: Record<number, "draft" | "published" | "done"> = { 0: "done", 1: "done", 2: "published", 3: "published", 4: "published", 5: "draft" };
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     const st = plan[i];
     if (st) weekStatus[dayKey(d)] = d < today && st !== "done" ? "done" : st;
+    if (i === 2 && dayKey(d) !== dayKey(today)) fieldDays.push(dayKey(d));
   }
   const ago = (n: number) => {
     const d = new Date(today);
@@ -64,6 +67,7 @@ function sampleAthlete() {
     name: "Martina López",
     date: dayKey(today),
     weekStatus,
+    fieldDays,
     history: {
       "sentadilla con barra": { last: { date: ago(4), weight: "80", reps: "5" }, pr: { date: ago(25), weight: "90", reps: "3" } },
       "rdl con barra": { last: { date: ago(4), weight: "60", reps: "8" }, pr: { date: ago(40), weight: "70", reps: "6" } },

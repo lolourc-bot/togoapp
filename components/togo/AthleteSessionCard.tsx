@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sessionTitle } from "@/lib/session-title";
 import { createPortal } from "react-dom";
 import {
   Activity,
@@ -297,7 +298,7 @@ export function SessionCard({
       <div className="relative">
         <button
           type="button"
-          aria-label={`Opciones de ${session.name}`}
+          aria-label={`Opciones de ${sessionTitle(session)}`}
           onClick={() => setMenu((v) => !v)}
           className="cursor-pointer"
           style={{ background: "none", border: "none", padding: 0 }}
@@ -389,7 +390,7 @@ export function SessionCard({
           />
         ) : (
           <div className="truncate" style={{ fontSize: 12, fontWeight: 600, color: "#111827" }}>
-            {session.name}
+            {sessionTitle(session)}
           </div>
         )}
         <div style={{ fontSize: 10, color: "#94A3B8" }}>
@@ -428,7 +429,7 @@ export function SessionCard({
   };
   const dense = (
     <DenseSessionBlock
-      name={session.name}
+      name={sessionTitle(session)}
       status={session.status}
       rows={session.field ? fieldRows(session) : denseRows(session)}
       menu={menuEl}

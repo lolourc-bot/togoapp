@@ -177,7 +177,7 @@ function CoachMessages() {
     setActiveId(id);
     const conv = convs.find((c) => c.id === id);
     setConvs((cs) => cs.map((c) => (c.id === id ? { ...c, unread: 0 } : c)));
-    if (coachId && !conv?.group) markReadApi(coachId, id, "coach").catch(() => {});
+    if (coachId && !conv?.group) markReadApi(coachId, id, "coach").then(() => window.dispatchEvent(new Event("togo:messages-read"))).catch(() => {});
   }
 
   function send(text: string) {

@@ -1,3 +1,4 @@
+import { sessionTitle } from "@/lib/session-title";
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Copy, MoreVertical, Plus, Trash2 } from "lucide-react";
@@ -94,7 +95,7 @@ function AthleteCalendar() {
     setOpenMenuId(null);
     if (!coachId) return;
     try {
-      await insertAthleteSession(coachId, athleteId, selectedDate, { ...s, id: crypto.randomUUID(), name: `${s.name} (copia)`, status: "draft" });
+      await insertAthleteSession(coachId, athleteId, selectedDate, { ...s, id: crypto.randomUUID(), name: s.name ? `${s.name} (copia)` : "", status: "draft" });
       toast.success("Sesión duplicada ✓");
       reload();
     } catch {
@@ -223,7 +224,7 @@ function AthleteCalendar() {
                   style={{ gap: 10, background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 12, padding: "12px 14px" }}
                 >
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#111827" }}>{s.name}</span>
+                    <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#111827" }}>{sessionTitle(s)}</span>
                     <span style={{ display: "block", fontSize: 11, color: "#94A3B8", marginTop: 2 }}>{s.items.length} ejercicio{s.items.length === 1 ? "" : "s"} · {s.minutes} min</span>
                   </span>
                   <span style={{ fontSize: 10, fontWeight: 700, color: STATUS_COLOR[s.status], flexShrink: 0 }}>{STATUS_LABEL[s.status]}</span>

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { formatProgramPrice, parsePriceInput } from "@/lib/program-price";
 import { useEffect, useMemo, useState } from "react";
 import { Dumbbell } from "@/components/togo/icons/Dumbbell";
 import { PhoneFrame } from "@/components/togo/Entrenamiento";
@@ -26,6 +27,9 @@ function ProgramasScreen() {
   const [programs, setPrograms] = useState<PublicProgramSummary[]>([]);
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState<ProgramLevel | "Todos">("Todos");
+  const [sport, setSport] = useState<string>("Todos");
+  // Only offer the sports that published programs actually have.
+  const sports = useMemo(() => [...new Set(programs.map((p) => p.sport).filter((x): x is string => Boolean(x)))].sort(), [programs]);
 
   useEffect(() => {
     fetchPublicPrograms().then((list) => { setPrograms(list); setLoading(false); });
@@ -34,11 +38,12 @@ function ProgramasScreen() {
   const filtered = useMemo(() => {
     return programs.filter((p) => {
       if (level !== "Todos" && p.level !== level) return false;
+      if (sport !== "Todos" && p.sport !== sport) return false;
       if (!query.trim()) return true;
       const q = query.trim().toLowerCase();
-      return p.name.toLowerCase().includes(q) || p.coachName.toLowerCase().includes(q);
+      return p.name.toLowerCase().includes(q) || p.coachName.toLowerCase().includes(q) || (p.sport ?? "").toLowerCase().includes(q);
     });
-  }, [programs, query, level]);
+  }, [programs, query, level, sport]);
 
   return (
     <PhoneFrame>
@@ -47,7 +52,15 @@ function ProgramasScreen() {
           <span style={{ fontSize: 20, fontWeight: 800, color: "#111827" }}>Programas</span>
         </div>
 
-        <MarketplaceSearchBar placeholder="Buscar programa o coach..." value={query} onChange={setQuery} />
+        <MarketplaceSearchBar placeholder="Buscar programa, deporte o coach..." value={query} onChange={setQuery} />
+
+        {sports.length > 0 ? (
+          <ChipRow>
+            {["Todos", ...sports].map((s) => (
+              <Chip key={s} label={s === "Todos" ? "Todos los deportes" : s} selected={sport === s} onClick={() => setSport(s)} />
+            ))}
+          </ChipRow>
+        ) : null}
 
         <ChipRow>
           {(["Todos", "Principiante", "Intermedio", "Avanzado"] as const).map((l) => (
@@ -74,14 +87,18 @@ function ProgramasScreen() {
                 className="flex"
                 style={{ backgroundColor: "#FFFFFF", borderRadius: 14, border: "1px solid #E2E8F0", padding: 14, gap: 12, textDecoration: "none" }}
               >
-                <div className="flex items-center justify-center" style={{ width: 56, height: 56, backgroundColor: "#F1F5F9", borderRadius: 10, flexShrink: 0 }}>
-                  <Dumbbell size={22} color="#CBD5E1" />
-                </div>
+                {p.coverUrl ? (
+                  <img src={p.coverUrl} alt="" style={{ width: 56, height: 56, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+                ) : (
+                  <div className="flex items-center justify-center" style={{ width: 56, height: 56, backgroundColor: "#F1F5F9", borderRadius: 10, flexShrink: 0 }}>
+                    <Dumbbell size={22} color="#CBD5E1" />
+                  </div>
+                )}
                 <div className="flex flex-col" style={{ flex: 1, gap: 4, minWidth: 0 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{p.name}</span>
-                  <span style={{ fontSize: 11, color: "#94A3B8" }}>{p.coachName}{p.weeks ? ` · ${p.weeks} semanas` : ""}</span>
+                  <span style={{ fontSize: 11, color: "#94A3B8" }}>{p.coachName}{p.sport ? ` · ${p.sport}` : ""}{p.weeks ? ` · ${p.weeks} semanas` : ""}</span>
                   {p.level ? <span style={{ alignSelf: "flex-start", fontSize: 10, borderRadius: 20, padding: "2px 8px", background: LEVEL_COLOR[p.level][0], color: LEVEL_COLOR[p.level][1] }}>{p.level}</span> : null}
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{p.price || "Consultar precio"}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{formatProgramPrice(p.price, p.currency, "Consultar precio")}</span>
                 </div>
               </Link>
             ))

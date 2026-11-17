@@ -1,3 +1,4 @@
+import { sessionTitle } from "@/lib/session-title";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronLeft, Layers, Link2 as LinkIcon, Plus, Trash2, X } from "lucide-react";
@@ -539,7 +540,7 @@ export function ProgramCalendar({
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              {s.name}
+                              {sessionTitle(s)}
                             </span>
                             <span style={{ display: "block", fontSize: 11, color: "#94A3B8", marginTop: 4 }}>
                               {s.exercises.length} ejercicios · ~{s.minutes} min

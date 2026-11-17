@@ -1,3 +1,4 @@
+import { sessionTitle } from "./session-title";
 import { supabase } from "@/lib/supabase";
 
 const FEEL_LABELS = ["Agotado", "Difícil", "Ok", "Bien", "Excelente"];
@@ -82,7 +83,7 @@ export async function fetchDashboard(coachId: string): Promise<DashboardData> {
     return {
       athleteId: s.athlete_id,
       athleteName: nameById.get(s.athlete_id) ?? "Atleta",
-      sessionName: s.name,
+      sessionName: sessionTitle(s),
       timeAgo: timeAgo(s.updated_at),
       blocks: countBlocks((s.items ?? []) as { chain: boolean }[], (s.circuits ?? []) as unknown[]),
       minutes: s.minutes ?? 0,

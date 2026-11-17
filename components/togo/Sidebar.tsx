@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { BrandLogo } from "./BrandLogo";
 import { useProfile } from "@/hooks/useProfile";
@@ -7,21 +8,56 @@ import {
   Activity, FlaskConical, Receipt, Settings, LogOut, type LucideIcon,
 } from "lucide-react";
 
-const navItems: { icon: LucideIcon; label: string; badge?: string; to: string }[] = [
+const navItems: { icon: LucideIcon; label: string; to: string }[] = [
   { icon: Home, label: "Inicio", to: "/" },
   { icon: Users, label: "Atletas", to: "/atletas" },
   { icon: Users, label: "Equipos", to: "/equipos" },
   { icon: BookOpen, label: "Biblioteca", to: "/biblioteca" },
   { icon: ShoppingBag, label: "Marketplace", to: "/marketplace-coach" },
   { icon: Receipt, label: "Facturación", to: "/facturacion" },
-  { icon: MessageCircle, label: "Mensajes", badge: "2", to: "/mensajes" },
+  { icon: MessageCircle, label: "Mensajes", to: "/mensajes" },
   { icon: Activity, label: "Bienestar", to: "/bienestar" },
   { icon: FlaskConical, label: "Lab", to: "/lab" },
 ];
 
+/**
+ * Real count of athlete messages the coach hasn't read yet (it used to be a fixed "2"). Refreshes when the tab
+ * regains focus and every minute.
+ */
+function useUnreadMessages(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      const { data } = await supabase.auth.getSession();
+      const coachId = data.session?.user.id;
+      if (!coachId) return;
+      const { count: n } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("coach_id", coachId)
+        .eq("sender", "athlete")
+        .is("read_at", null);
+      if (alive) setCount(n ?? 0);
+    };
+    load();
+    const t = setInterval(load, 60_000);
+    window.addEventListener("focus", load);
+    window.addEventListener("togo:messages-read", load);
+    return () => {
+      window.removeEventListener("togo:messages-read", load);
+      alive = false;
+      clearInterval(t);
+      window.removeEventListener("focus", load);
+    };
+  }, []);
+  return count;
+}
+
 export function Sidebar({ active = "Inicio" }: { active?: string }) {
   const navigate = useNavigate();
   const { profile } = useProfile();
+  const unreadMessages = useUnreadMessages();
 
   const initials = profile?.full_name
     ? profile.full_name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
@@ -41,8 +77,9 @@ export function Sidebar({ active = "Inicio" }: { active?: string }) {
       </div>
 
       <nav className="mt-8 flex flex-col gap-1 px-3">
-        {navItems.map(({ icon: Icon, label, badge, to }) => {
+        {navItems.map(({ icon: Icon, label, to }) => {
           const isActive = active === label;
+          const badge = label === "Mensajes" && unreadMessages > 0 ? (unreadMessages > 99 ? "99+" : String(unreadMessages)) : null;
           return (
             <button key={label} type="button" onClick={() => navigate({ to: to as any })}
               className="flex h-10 items-center gap-3 rounded-sm px-3 text-left text-[0.875rem] transition-colors"

@@ -28,5 +28,6 @@ export const Route = createFileRoute("/sesiones/$sessionId")({
 function SessionEditorRoute() {
   const search = Route.useSearch();
   const { sessionId } = Route.useParams();
-  return <SessionEditor search={search} sessionId={sessionId} />;
+  // Remount when jumping to another session/day from inside the editor, so it loads fresh.
+  return <SessionEditor key={`${sessionId}|${search.date ?? ""}`} search={search} sessionId={sessionId} />;
 }

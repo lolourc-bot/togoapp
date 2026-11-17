@@ -1,3 +1,4 @@
+import { sessionTitle } from "@/lib/session-title";
 import { Lock } from "lucide-react";
 import { Link as RLink } from "@tanstack/react-router";
 import { useUserContext } from "@/lib/user-context";
@@ -519,7 +520,7 @@ function ProgressContent({ athleteId }: { athleteId?: string | undefined }) {
                   >
                     <div className="flex flex-col" style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
-                        {s.name}
+                        {sessionTitle(s)}
                       </span>
                       <span
                         style={{

@@ -254,6 +254,7 @@ export function ExercisePickerPanel({
         </div>
       </div>
       <NewExerciseModal
+        takenNames={library.map((e) => e.name)}
         open={quick}
         initial={quickInitial}
         onClose={() => setQuick(false)}

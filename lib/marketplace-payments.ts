@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isProgramCurrency, parsePriceInput } from "./program-price";
 import { MercadoPagoConfig, Preference } from "mercadopago";
 import { getStripeClient } from "@/lib/stripe-admin";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -227,15 +228,23 @@ export const createDirectProgramPurchase = createServerFn({ method: "POST" })
   .validator((data: { coachId: string; programId: string; buyerName: string; buyerEmail: string }) => data)
   .handler(async ({ data }): Promise<{ purchaseId: string }> => {
     const admin = getSupabaseAdmin();
-    const { data: program } = await admin.from("programs").select("id, price, payment_type").eq("id", data.programId).eq("coach_id", data.coachId).maybeSingle();
+    // "*" so the optional `currency` column (migration 0048) doesn't break checkout while it's pending.
+    const { data: program } = await admin.from("programs").select("*").eq("id", data.programId).eq("coach_id", data.coachId).maybeSingle();
     if (!program) throw new Error("Programa no encontrado");
-    const priceNum = program["price"] ? Number(String(program["price"]).replace(",", ".")) || 0 : 0;
+    // Understands "8.500", "$8.500", "8.500,50" and plain "8500" (the old Number() parse read "8.500" as 8.5).
+    const priceNum = parsePriceInput(program["price"] as string | null);
     if (program["payment_type"] !== "unico" || priceNum <= 0) throw new Error("Este programa no tiene un precio de pago único");
 
-    const { data: profile } = await admin.from("profiles").select("currency").eq("id", data.coachId).maybeSingle();
-    const isArs = profile?.["currency"] === "ARS";
-    const processor = isArs ? "mercadopago" : "stripe";
-    const currency = isArs ? "ARS" : "USD";
+    // The program's own currency wins; older programs fall back to the coach's billing currency.
+    // Pesos go through Mercado Pago, dollars and euros through Stripe.
+    let currency: string;
+    if (isProgramCurrency(program["currency"])) {
+      currency = program["currency"];
+    } else {
+      const { data: profile } = await admin.from("profiles").select("currency").eq("id", data.coachId).maybeSingle();
+      currency = profile?.["currency"] === "ARS" ? "ARS" : "USD";
+    }
+    const processor = currency === "ARS" ? "mercadopago" : "stripe";
     const amountTotal = Math.round(priceNum * 100);
     const commissionAmount = Math.round(amountTotal * 0.15);
     const netAmount = amountTotal - commissionAmount;

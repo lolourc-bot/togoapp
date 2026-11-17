@@ -1,10 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { formatProgramPrice, parsePriceInput } from "@/lib/program-price";
 import { useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { Eye, ImageIcon, Pencil } from "lucide-react";
+import { PublishProgramModal } from "@/components/togo/PublishProgramModal";
 import { Sidebar } from "@/components/togo/Sidebar";
 import { TopBar } from "@/components/togo/TopBar";
 import { getCoachId } from "@/lib/programs";
-import { fetchMyMarketplaceProfile, type MarketplaceCoach } from "@/lib/marketplace";
+import { fetchMyMarketplaceProfile, fetchMyMarketplacePrograms, type MarketplaceCoach, type MarketplaceProgram } from "@/lib/marketplace";
 import { fetchMyProgramPurchases, type CoachProgramPurchase } from "@/lib/marketplace-payments";
 
 export const Route = createFileRoute("/marketplace-coach")({
@@ -33,12 +35,16 @@ function MarketplaceCoachPanel() {
   const [profile, setProfile] = useState<MarketplaceCoach | null>(null);
   const [purchases, setPurchases] = useState<CoachProgramPurchase[]>([]);
   const [filter, setFilter] = useState<PurchaseFilter>("paid");
+  const [programs, setPrograms] = useState<MarketplaceProgram[]>([]);
+  const [editProgram, setEditProgram] = useState<MarketplaceProgram | null>(null);
+  const reloadPrograms = (cid: string) => fetchMyMarketplacePrograms(cid).then(setPrograms);
 
   useEffect(() => {
     getCoachId().then(async (cid) => {
       if (!cid) { setLoading(false); return; }
       setCoachId(cid);
-      const [prof, purch] = await Promise.all([fetchMyMarketplaceProfile(cid), fetchMyProgramPurchases(cid)]);
+      const [prof, purch, progs] = await Promise.all([fetchMyMarketplaceProfile(cid), fetchMyProgramPurchases(cid), fetchMyMarketplacePrograms(cid)]);
+      setPrograms(progs);
       setProfile(prof);
       setPurchases(purch);
       setLoading(false);
@@ -76,11 +82,60 @@ function MarketplaceCoachPanel() {
                   </p>
                 </div>
                 {coachId ? (
-                  <Link to="/perfil-coach/$coachId" params={{ coachId }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-border">
-                    Ver y editar <ExternalLink size={14} />
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link to="/perfil-coach/$coachId" params={{ coachId }} search={{ vista: "atleta" }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-border">
+                      Ver como atleta <Eye size={14} />
+                    </Link>
+                    <Link to="/perfil-coach/$coachId" params={{ coachId }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: "#111827" }}>
+                      Editar perfil
+                    </Link>
+                  </div>
                 ) : null}
               </div>
+
+              <div className="mb-3 flex items-baseline justify-between">
+                <h2 className="text-base font-semibold text-foreground">Mis programas publicados</h2>
+                <Link to="/lab" className="text-[13px] font-medium" style={{ color: "#0272B7" }}>Publicar otro desde Lab →</Link>
+              </div>
+              {programs.filter((p) => p.visible).length === 0 ? (
+                <div className="mb-8 rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                  Todavía no publicaste programas. En Lab → Programas, tocá "···" en un programa y elegí "Publicar en marketplace".
+                </div>
+              ) : (
+                <div className="mb-8 grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))" }}>
+                  {programs.filter((p) => p.visible).map((p) => (
+                    <div key={p.id} className="group flex flex-col overflow-hidden rounded-xl border border-border bg-white transition-shadow hover:shadow-[0_8px_24px_rgba(1,23,38,0.08)]">
+                      <div className="relative" style={{ height: 130, backgroundColor: "#F1F5F9" }}>
+                        {p.coverUrl ? (
+                          <img src={p.coverUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full flex-col items-center justify-center gap-1 text-[12px]" style={{ color: "#94A3B8" }}>
+                            <ImageIcon size={22} /> Sin portada
+                          </div>
+                        )}
+                        <span className="absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: "#DCFCE7", color: "#166534" }}>Publicado</span>
+                      </div>
+                      <div className="flex flex-1 flex-col gap-1 p-3.5">
+                        <span className="truncate text-[14px] font-bold" style={{ color: "#111827" }}>{p.name}</span>
+                        <span className="truncate text-[12px]" style={{ color: "#64748B" }}>
+                          {[p.sport || "General", p.level, p.weeks ? `${p.weeks} semanas` : null].filter(Boolean).join(" · ")}
+                        </span>
+                        <div className="mt-auto flex items-center justify-between pt-2">
+                          <span className="text-[15px] font-extrabold" style={{ color: "#111827" }}>{formatProgramPrice(p.price, p.currency)}</span>
+                          <button
+                            type="button"
+                            onClick={() => setEditProgram(p)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium hover:bg-[#F8FAFC]"
+                            style={{ color: "#374151" }}
+                          >
+                            <Pencil size={12} /> Editar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <h2 className="text-base font-semibold text-foreground mb-3">Ventas de programas</h2>
               <div className="flex items-center gap-1 mb-4" style={{ width: "fit-content", backgroundColor: "#F1F5F9", borderRadius: 10, padding: 3 }}>
@@ -135,6 +190,15 @@ function MarketplaceCoachPanel() {
             </>
           )}
         </main>
+        {editProgram && coachId ? (
+          <PublishProgramModal
+            program={editProgram}
+            coachId={coachId}
+            onClose={() => setEditProgram(null)}
+            onSaved={() => reloadPrograms(coachId)}
+            takenNames={programs.filter((p) => p.id !== editProgram.id).map((p) => p.name)}
+          />
+        ) : null}
       </div>
     </div>
   );

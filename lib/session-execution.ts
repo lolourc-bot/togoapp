@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { sessionTitle } from "./session-title";
 import type { CircuitType } from "@/components/togo/CircuitModal";
 import { fetchLibraryExercises } from "@/lib/exercise-data";
 
@@ -92,7 +93,7 @@ export async function fetchSessionForExecution(sessionId: string): Promise<Sessi
     });
   }
 
-  return { id: data.id, coachId: data.coach_id, athleteId: data.athlete_id, name: data.name, status: data.status, blocks };
+  return { id: data.id, coachId: data.coach_id, athleteId: data.athlete_id, name: sessionTitle(data), status: data.status, blocks };
 }
 
 export async function syncExerciseSets(
@@ -160,5 +161,5 @@ export async function fetchCompletionSummary(sessionId: string): Promise<{ name:
   }
   blocks += circuits.length;
   const sets = items.reduce((sum, it) => sum + Math.max(1, parseInt(it.sets, 10) || 1), 0);
-  return { name: data.name, blocks, sets };
+  return { name: sessionTitle(data), blocks, sets };
 }
